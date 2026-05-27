@@ -1,0 +1,365 @@
+// =====================================================================
+// Approach A: Data Stream Test Procedure (For Kibana Dev Tools)
+// Target version: Elasticsearch / Elastic Cloud  v8.19
+// Variant: HOT → COLD → FROZEN → DELETE (Full Lifecycle, No Restore)
+// =====================================================================
+//
+// PURPOSE
+// -------
+// This scenario walks the complete ILM lifecycle for a data stream:
+//
+//   hot → cold → frozen → delete
+//
+// Four queryability checkpoints are verified against the live data stream:
+//
+//   ✅ A: HOT    — Active write target; full random-access indices.
+//   ✅ B: COLD   — Read-only; allocated to cold-tier nodes.
+//   ✅ C: FROZEN — Partial searchable-snapshot mount; cheaper storage.
+//   ❌ D: DELETE — ILM removes the frozen mount AND the ILM snapshot
+//                  (delete_searchable_snapshot: true). Data is permanently
+//                  inaccessible — no restore path exists after this phase.
+//
+// The key observation: the data stream transparently searches all tiers
+// at checkpoints A–C. At checkpoint D the data is simply gone.
+//
+// SLM runs every 3 minutes and takes automatic snapshots throughout
+// the test. It is not used for recovery in this scenario; it is present
+// only to simulate a real-world environment where SLM is running
+// alongside ILM.
+//
+// ⚠️  v8.19 vs v9.2+ DIFFERENCE — NO fm-clone step
+// In v9.2+, ILM creates a temporary "fm-clone-<uuid>-" copy of the
+// backing index, force-merges THAT clone, and then snapshots the clone.
+// In v8.x (including v8.19), ILM performs the force merge directly on
+// the original backing index and snapshots it under its original name.
+// Therefore the frozen-phase snapshot contains the raw ".ds-..." name:
+//   .ds-logs-mytest-default-default-2026.05.27-000001
+// (no "fm-clone-..." prefix).
+//
+// ⚠️  DESTRUCTIVE: delete_searchable_snapshot: true
+// Unlike the base.txt scenario (which preserves the ILM snapshot with
+// delete_searchable_snapshot: false), this policy permanently destroys
+// the ILM snapshot when the delete phase fires. There is no restore path.
+//
+// RESOURCE NAMES
+// ---------------
+// Data stream      : logs-mytest-default-default
+// Index pattern    : logs-mytest-default-*
+// ILM policy       : approach_a_default_policy
+// Index template   : approach_a_default_template   (priority: 250)
+// SLM policy       : approach_a_default_slm_policy
+
+// ---------------------------------------------------------------------
+// Step 1: Preparation (Shorten ILM poll interval to 10 s)
+// ---------------------------------------------------------------------
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": "10s"
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2: Create ILM policy — HOT → COLD → FROZEN → DELETE
+// ---------------------------------------------------------------------
+// All min_age values are relative to the rollover time of each backing index.
+//
+//   hot    — Roll over at 1 document (creates a new backing index per doc).
+//   cold   — min_age: 0m: moves to cold-tier immediately after rollover.
+//            readonly: {} prevents accidental writes on cold nodes.
+//   frozen — min_age: 3m: 3 minutes after rollover, ILM creates a
+//            searchable snapshot in "found-snapshots" and mounts it as
+//            a partial (frozen) index. The cold copy is removed.
+//   delete — min_age: 1h: 1 hour after rollover, ILM deletes the frozen
+//            partial mount AND the ILM snapshot.
+//            ⚠️  delete_searchable_snapshot: true — data is permanently lost.
+PUT _ilm/policy/approach_a_default_policy
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "actions": {
+          "rollover": { "max_docs": 1 }
+        }
+      },
+      "cold": {
+        "min_age": "0m",
+        "actions": {
+          "readonly": {}
+        }
+      },
+      "frozen": {
+        "min_age": "3m",
+        "actions": {
+          "searchable_snapshot": {
+            "snapshot_repository": "found-snapshots"
+          }
+        }
+      },
+      "delete": {
+        "min_age": "1h",
+        "actions": {
+          "delete": {
+            "delete_searchable_snapshot": true
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2.5: Create SLM policy (auto-runs every 3 minutes)
+// ---------------------------------------------------------------------
+// Snapshots all indices every 3 minutes; retains up to 5 snapshots.
+// This SLM policy is not used for recovery in this scenario. It is
+// configured to reflect a realistic setup where SLM runs in parallel
+// with ILM. The SLM snapshots taken here capture each backing index
+// while it is still in the hot tier (before cold/frozen transitions).
+//
+// SLM snapshot names will be: approach-a-default-slm-<YYYY.MM.DD>[-N]
+PUT _slm/policy/approach_a_default_slm_policy
+{
+  "name": "<approach-a-default-slm-{now/d}>",
+  "schedule": "0 */3 * * * ?",
+  "repository": "found-snapshots",
+  "config": {
+    "indices": "*",
+    "include_global_state": false,
+    "partial": true
+  },
+  "retention": {
+    "expire_after": "30d",
+    "min_count": 1,
+    "max_count": 5
+  }
+}
+
+// Verify the SLM policy was created (confirm next_execution is ~3 min out):
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// ---------------------------------------------------------------------
+// Step 3: Create Index Template for Data Streams
+// ---------------------------------------------------------------------
+// priority: 250 ensures this template wins over:
+//   • Built-in "logs" template     (priority: 100, pattern: logs-*-*)
+//   • approach_a_ds_template       (priority: 200, pattern: logs-mytest-*)
+//     used by base.txt / slm.txt / slm_waitfor.txt on this same cluster.
+// IMPORTANT: "data_stream": {} is required so Elasticsearch treats
+// any write to logs-mytest-default-* as a data stream operation.
+PUT _index_template/approach_a_default_template
+{
+  "index_patterns": ["logs-mytest-default-*"],
+  "priority": 250,
+  "data_stream": { },
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "approach_a_default_policy"
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 4: Ingestion — Create 5 backing indices (000001–000005)
+// ---------------------------------------------------------------------
+// With max_docs: 1, every document triggers a rollover once ILM polls
+// (every 10 s). Wait ~15 s between documents to allow each rollover to
+// complete before the next ingest.
+//
+// After the 5th rollover, backing index 000006 becomes the active (empty)
+// write target. Indices 000001–000005 each hold exactly one document and
+// will progress through cold → frozen → delete independently.
+
+// 4.1 Ingest Doc 1 — lands in backing index 000001
+POST logs-mytest-default-default/_doc
+{
+  "@timestamp": "2026-05-27T10:00:00Z",
+  "message": "Log event 1 — backing index 000001"
+}
+
+// WAIT ~15 SECONDS for ILM to evaluate max_docs:1 and roll over to 000002.
+
+// 4.2 Ingest Doc 2 — lands in backing index 000002
+POST logs-mytest-default-default/_doc
+{
+  "@timestamp": "2026-05-27T10:05:00Z",
+  "message": "Log event 2 — backing index 000002"
+}
+
+// WAIT ~15 SECONDS for the next rollover.
+
+// 4.3 Ingest Doc 3 — lands in backing index 000003
+POST logs-mytest-default-default/_doc
+{
+  "@timestamp": "2026-05-27T10:10:00Z",
+  "message": "Log event 3 — backing index 000003"
+}
+
+// WAIT ~15 SECONDS for the next rollover.
+
+// 4.4 Ingest Doc 4 — lands in backing index 000004
+POST logs-mytest-default-default/_doc
+{
+  "@timestamp": "2026-05-27T10:15:00Z",
+  "message": "Log event 4 — backing index 000004"
+}
+
+// WAIT ~15 SECONDS for the next rollover.
+
+// 4.5 Ingest Doc 5 — lands in backing index 000005
+POST logs-mytest-default-default/_doc
+{
+  "@timestamp": "2026-05-27T10:20:00Z",
+  "message": "Log event 5 — backing index 000005"
+}
+
+// WAIT ~15 SECONDS for the final rollover → 000006 becomes the active
+// write target (empty). Indices 000001–000005 are now closed for writes.
+
+// ---------------------------------------------------------------------
+// Step 5: Monitor Phase Transitions & Verify Queryability
+// ---------------------------------------------------------------------
+
+// 5.1 List all backing indices. Note the exact names (date varies by run):
+GET _cat/indices/.ds-logs-mytest-default-default-*?v&h=index,health,status,docs.count,store.size
+
+// 5.2 Check the ILM phase of the oldest index (replace <date> with the
+//     actual date string from the output above, e.g. "2026.05.27"):
+GET .ds-logs-mytest-default-default-<date>-000001/_ilm/explain
+
+// ✅ CHECKPOINT A — ALL TIERS (query works throughout)
+// By the time all 5 docs are ingested, earlier indices (000001, 000002)
+// may already be in cold (cold min_age is 0m). The data stream query
+// searches all tiers transparently — all 5 documents should be returned.
+GET logs-mytest-default-default/_search
+// Expected: "hits.total.value": 5
+
+// Count only (faster poll during the delete phase later):
+GET logs-mytest-default-default/_count
+// Expected: {"count":5,...}
+
+// ─────────────────────────────────────────────────────────────────────
+// 5.3 COLD PHASE (~0–30 s after each rollover)
+// ─────────────────────────────────────────────────────────────────────
+// cold min_age is 0m — ILM moves rolled-over backing indices to cold
+// almost immediately (within one 10 s poll cycle).
+//
+// Poll until 000001 shows "phase": "cold":
+GET .ds-logs-mytest-default-default-<date>-000001/_ilm/explain
+// Look for: "phase": "cold", "action": "readonly", "step": "complete"
+
+// ✅ CHECKPOINT B — COLD TIER
+// Cold indices are read-only but fully searchable. The data stream query
+// still returns all 5 documents.
+GET logs-mytest-default-default/_search
+// Expected: "hits.total.value": 5
+
+// ─────────────────────────────────────────────────────────────────────
+// 5.4 FROZEN PHASE (~3 minutes after rollover)
+// ─────────────────────────────────────────────────────────────────────
+// frozen min_age is 3m. When ILM triggers the frozen phase, it:
+//   1. Creates a snapshot of the backing index in "found-snapshots".
+//      Snapshot name format (v8.19): <YYYY.MM.DD>-<index>-<policy>-<uuid>
+//      Example: 2026.05.27-.ds-logs-mytest-default-default-2026.05.27-000001-approach_a_default_policy-<uuid>
+//   2. Mounts the snapshot as a partial (frozen) index.
+//      Frozen mount name (v8.19): partial-.ds-logs-mytest-default-default-<date>-000001
+//   3. Removes the cold-tier copy of the backing index.
+//
+// Poll until _ilm/explain shows "phase": "frozen" for 000001:
+GET .ds-logs-mytest-default-default-<date>-000001/_ilm/explain
+// or check for the partial mount appearing:
+GET _cat/indices/partial-.ds-logs-mytest-default-default-*?v&h=index,health,status,docs.count
+
+// Confirm the ILM snapshot was created:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+// Look for a snapshot named <YYYY.MM.DD>-...approach_a_default_policy-...
+// with "state": "SUCCESS" and ".indices" containing the raw ".ds-..." name.
+
+// ✅ CHECKPOINT C — FROZEN TIER
+// Partial mounts are fully searchable via the data stream name.
+// All 5 documents should still be returned.
+GET logs-mytest-default-default/_search
+// Expected: "hits.total.value": 5
+
+// ─────────────────────────────────────────────────────────────────────
+// 5.5 DELETE PHASE (~1 hour after rollover)
+// ─────────────────────────────────────────────────────────────────────
+// delete min_age is 1h. ILM will:
+//   1. Unmount and remove the frozen partial index.
+//   2. DELETE the ILM snapshot from "found-snapshots".
+//      ⚠️  delete_searchable_snapshot: true — this is PERMANENT.
+//          There is no restore path once this fires.
+//
+// To observe deletion without waiting the full hour, temporarily shorten
+// the delete min_age (test clusters only — revert before leaving):
+//
+//   PUT _ilm/policy/approach_a_default_policy
+//   {
+//     "policy": {
+//       "phases": {
+//         "hot":    { "actions": { "rollover": { "max_docs": 1 } } },
+//         "cold":   { "min_age": "0m",  "actions": { "readonly": {} } },
+//         "frozen": { "min_age": "3m",  "actions": { "searchable_snapshot": { "snapshot_repository": "found-snapshots" } } },
+//         "delete": { "min_age": "5m",  "actions": { "delete": { "delete_searchable_snapshot": true } } }
+//       }
+//     }
+//   }
+//
+// Poll until the frozen mount for 000001 returns 404:
+GET .ds-logs-mytest-default-default-<date>-000001
+// → 404: {"statusCode":404,"error":"Not Found","message":"No indices found"}
+
+// As each backing index is deleted, the hit count decreases.
+// Repeat this poll and watch the count drop 5 → 4 → 3 → 2 → 1 → 0:
+GET logs-mytest-default-default/_count
+
+// Confirm ILM snapshots are also deleted:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+// → Snapshots named <YYYY.MM.DD>-...approach_a_default_policy-... should be gone.
+
+// ❌ CHECKPOINT D — AFTER DELETE
+// Once all 5 backing indices are deleted, the data stream returns 0 hits
+// (or an index_not_found_exception once no backing indices remain).
+GET logs-mytest-default-default/_search
+// Expected: "hits.total.value": 0
+// (or error if the data stream itself was removed by ILM)
+
+// NOTE: SLM snapshots (named approach-a-default-slm-*) may still exist
+// and do contain snapshots of the backing indices taken while they were in
+// the hot tier. However, restoring a hot-tier index from an SLM snapshot
+// after the backing index has been through the frozen lifecycle is outside
+// the scope of this scenario. This scenario's purpose is to observe the
+// phase transition queryability — not to demonstrate a restore path.
+
+// ---------------------------------------------------------------------
+// Step 8: Snapshot Cleanup (SLM snapshots remaining after the test)
+// ---------------------------------------------------------------------
+// List remaining SLM snapshots to identify their names:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
+
+// Delete SLM snapshots individually (replace with actual names from above):
+// DELETE _snapshot/found-snapshots/<approach-a-default-slm-snapshot-1>
+// DELETE _snapshot/found-snapshots/<approach-a-default-slm-snapshot-2>
+// ...
+
+// ---------------------------------------------------------------------
+// Step 9: Environment Cleanup
+// ---------------------------------------------------------------------
+// 9.1 Reset ILM poll interval to default (null = 10m):
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": null
+  }
+}
+
+// 9.2 Stop future SLM auto-snapshots:
+DELETE _slm/policy/approach_a_default_slm_policy
+
+// 9.3 Delete the data stream and all its remaining backing indices
+//     (active write target 000006 and any frozen mounts still alive):
+DELETE _data_stream/logs-mytest-default-default
+
+// 9.4 Delete ILM policy and index template:
+DELETE _ilm/policy/approach_a_default_policy
+DELETE _index_template/approach_a_default_template
