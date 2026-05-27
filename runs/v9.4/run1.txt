@@ -1,0 +1,326 @@
+=====================================================================
+Elastic Stack ILM Lifecycle Test — Approach A: Data Stream
+Run Date: 2026-05-27
+=====================================================================
+
+=====================================================================
+⚠️  ATTEMPT 1 ABORTED — Template Priority Conflict (documented below)
+=====================================================================
+
+PROBLEM IDENTIFIED: Template Priority Conflict
+----------------------------------------------
+
+Our template `approach_a_ds_template` was created WITHOUT a `priority`
+field, which means it defaults to priority 0.
+
+The built-in `logs` template has:
+  - Pattern:  logs-*-*
+  - Priority: 100
+
+When `logs-mytest-default` was created it matched BOTH templates.
+Elasticsearch applied the HIGHER priority template → built-in `logs`.
+
+SYMPTOMS OBSERVED:
+  1. All 3 documents wrote to .ds-logs-mytest-default-2026.05.27-000001
+     (no rollovers occurred — wrong ILM policy was applied)
+  2. ILM explain shows policy: "logs" (built-in), NOT "approach_a_ds_policy"
+  3. Data stream generation = 1 (no rollovers)
+
+FIX APPLIED TO test_scenario.txt:
+  Step 3 template now includes "priority": 200 (outranks built-in logs
+  template at priority 100). Comment added explaining the requirement.
+
+Cleanup performed:
+  - DELETE _data_stream/logs-mytest-default          → 200 OK
+  - DELETE _index_template/approach_a_ds_template    → 200 OK
+  - DELETE _ilm/policy/approach_a_ds_policy          → 200 OK
+  - PUT _cluster/settings (reset poll interval)      → 200 OK
+
+=====================================================================
+RE-RUN — Starting from Step 1 with fixed scenario
+=====================================================================
+
+=====================================================================
+Step 1: Preparation — Shorten ILM poll interval to 10s
+=====================================================================
+Request: PUT _cluster/settings
+Response: {"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+[HTTP 200]
+
+=====================================================================
+Step 2: Create ILM policy — approach_a_ds_policy
+=====================================================================
+Policy: hot(rollover max_docs:1) → frozen(searchable_snapshot) → delete(3m, keep snapshot)
+Response: {"acknowledged":true}
+[HTTP 200]
+
+=====================================================================
+Step 3: Create Index Template — approach_a_ds_template (priority: 200)
+=====================================================================
+Pattern: logs-mytest-*  |  priority: 200  |  data_stream: {}  |  ILM: approach_a_ds_policy
+Response: {"acknowledged":true}
+[HTTP 200]
+
+--- Template verification (confirm priority=200) ---
+priority: 200
+ilm_policy: None
+
+--- Template verification (raw settings check) ---
+priority: 200  ✓
+ILM policy: approach_a_ds_policy  ✓ (stored as nested JSON: index.lifecycle.name)
+
+=====================================================================
+Step 4.1: Ingest Doc 1 → expected backing index 000001
+=====================================================================
+Response: {"_index":".ds-logs-mytest-default-2026.05.27-000001","_id":"AZ5neqMrL6MQj5vxzr1v","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+[HTTP 201]
+→ Landed in: .ds-logs-mytest-default-2026.05.27-000001
+
+Waiting 20s for ILM rollover (max_docs:1 check every 10s)...
+--- ILM explain after Doc 1 wait ---
+index: .ds-logs-mytest-default-2026.05.27-000001
+  policy: approach_a_ds_policy
+  phase: frozen
+  action: searchable_snapshot
+  step: check-ts-end-time-passed
+Data stream state: generation: 2
+  .ds-logs-mytest-default-2026.05.27-000001
+  .ds-logs-mytest-default-2026.05.27-000002
+
+=====================================================================
+Step 4.2: Ingest Doc 2 → expected backing index 000002
+=====================================================================
+Response: {"_index":".ds-logs-mytest-default-2026.05.27-000002","_id":"AZ5ne6MrL6MQj5t5zoNw","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+[HTTP 201]
+→ Landed in: .ds-logs-mytest-default-2026.05.27-000002
+
+Waiting 20s for ILM rollover...
+--- ILM explain after Doc 2 wait ---
+index: .ds-logs-mytest-default-2026.05.27-000002
+  policy: approach_a_ds_policy
+  phase: hot
+  action: rollover
+  step: check-rollover-ready
+Data stream state: generation: 3
+  partial-.ds-logs-mytest-default-2026.05.27-000001
+  .ds-logs-mytest-default-2026.05.27-000002
+
+=====================================================================
+Step 4.3: Ingest Doc 3 → expected backing index 000003
+=====================================================================
+Response: {"_index":".ds-logs-mytest-default-2026.05.27-000002","_id":"AZ5ne6MrL6MQj5vJzhNx","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":1,"_primary_term":1}
+[HTTP 201]
+→ Landed in: .ds-logs-mytest-default-2026.05.27-000002
+
+Waiting 25s for 000002 rollover to complete (it now holds 2 docs, max_docs=1)...
+
+--- Post-Doc3 state check ---
+generation: 3
+  partial-.ds-logs-mytest-default-2026.05.27-000001 | ilm_policy: approach_a_ds_policy
+  .ds-logs-mytest-default-2026.05.27-000002 | ilm_policy: approach_a_ds_policy
+
+--- Cat indices (.ds-logs-mytest-*) ---
+index                                     status docs.count store.size
+.ds-logs-mytest-default-2026.05.27-000002 open            0       227b
+--- Cat indices (partial-.ds-logs-mytest-*) ---
+index status docs.count store.size
+
+--- ILM explain (all backing indices) ---
+.ds-logs-mytest-default-2026.05.27-000001 → 
+.ds-logs-mytest-default-2026.05.27-000002 →   .ds-logs-mytest-default-2026.05.27-000002: phase=hot, action=rollover, step=check-rollover-ready
+.ds-logs-mytest-default-2026.05.27-000003 → 
+NOTE: Doc 3 landed in 000002 (timing — rollover of 000002 was in-flight).
+      000002 now holds 2 docs (Doc 2 + Doc 3). Continuing to wait for 000002 rollover.
+
+Waiting 30s for 000002→000003 rollover to complete...
+--- Data stream state after 000002 rollover wait ---
+generation: 6
+  partial-.ds-logs-mytest-default-2026.05.27-000002
+  .ds-logs-mytest-default-2026.05.27-000005
+
+--- ILM explain for 000002 and 000003 ---
+  000002 → 
+  000003 → 
+
+=====================================================================
+Step 5: Identify Backing Indices & Monitor Deletion
+=====================================================================
+--- All indices matching .ds-logs-mytest-* or partial-.ds-logs-mytest-* ---
+index                                             status health docs.count store.size
+.ds-logs-mytest-default-2026.05.27-000005         open   yellow          0       227b
+partial-.ds-logs-mytest-default-2026.05.27-000002 open   green           2         0b
+
+--- Full data stream details ---
+generation: 6
+status: YELLOW
+indices:
+  partial-.ds-logs-mytest-default-2026.05.27-000002
+    ilm_policy=approach_a_ds_policy, prefer_ilm=True
+  .ds-logs-mytest-default-2026.05.27-000005
+    ilm_policy=approach_a_ds_policy, prefer_ilm=True
+
+--- ILM explain for ALL current backing indices ---
+  000005: .ds-logs-mytest-default-2026.05.27-000005: phase=hot, action=rollover, step=check-rollover-ready
+
+--- ILM explain for partial-000002 (frozen) ---
+index: partial-.ds-logs-mytest-default-2026.05.27-000002
+  policy: approach_a_ds_policy
+  phase: frozen
+  action: complete
+  step: complete
+  age: 2.67m
+  phase_time_millis: 1779852802847
+
+--- Searching found-snapshots for ILM-created snapshots (recent 20) ---
+Total matching snapshots: 20
+  2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-r1bxittntvmgzxgpcbxzwa
+    state=SUCCESS, start=2026-05-27T03:33:52.860Z
+    indices=['fm-clone-ua9t-.ds-logs-mytest-default-2026.05.27-000002']
+  2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-u1dysmjssdmm40fziw6_uw
+    state=SUCCESS, start=2026-05-27T03:30:02.808Z
+    indices=['fm-clone-9yz2-.ds-logs-mytest-default-2026.05.27-000001']
+  cloud-snapshot-2026.05.27-mix9tubnt8kqbbzhakpkjw
+    state=SUCCESS, start=2026-05-27T03:29:59.957Z
+    indices=['.ds-logs-mytest-default-2026.05.27-000002', 'fm-clone-9yz2-.ds-logs-mytest-default-2026.05.27-000001', '.ds-logs-mytest-default-2026.05.27-000001']
+
+
+--- partial-000002 age: 2.67m, delete phase starts at 3m. Waiting 60s for deletion... ---
+✓ partial-000002 has been deleted by ILM after poll #1 (waited 35s)
+
+--- Final data stream state (post-deletion) ---
+generation: 7
+indices:
+  .ds-logs-mytest-default-2026.05.27-000005
+
+--- Verify 000001 returns 404 (deleted) ---
+.ds-logs-mytest-default-2026.05.27-000001 → HTTP 404  ✓ deleted
+--- Verify partial-000002 returns 404 (deleted) ---
+partial-.ds-logs-mytest-default-2026.05.27-000002 → HTTP 404  ✓ deleted
+
+=====================================================================
+Step 6: Restore Phase
+=====================================================================
+NOTE: ILM frozen phase snapshots contain 'fm-clone-<uuid>-' prefixed
+      index names. The rename_pattern '.*\.ds-(.+)' strips this prefix.
+
+ILM snapshot for 000001: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-u1dysmjssdmm40fziw6_uw
+  → contains index: fm-clone-9yz2-.ds-logs-mytest-default-2026.05.27-000001
+ILM snapshot for 000002: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-r1bxittntvmgzxgpcbxzwa
+  → contains index: fm-clone-ua9t-.ds-logs-mytest-default-2026.05.27-000002
+
+--- Verifying snapshot for 000001 ---
+snapshot: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-u1dysmjssdmm40fziw6_uw
+state: SUCCESS
+indices: ['fm-clone-9yz2-.ds-logs-mytest-default-2026.05.27-000001']
+
+--- Verifying snapshot for 000002 ---
+snapshot: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-r1bxittntvmgzxgpcbxzwa
+state: SUCCESS
+indices: ['fm-clone-ua9t-.ds-logs-mytest-default-2026.05.27-000002']
+
+--- Restoring Backing Index 1 (000001) ---
+Request: POST _snapshot/found-snapshots/2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-u1dysmjssdmm40fziw6_uw/_restore
+  indices: fm-clone-9yz2-.ds-logs-mytest-default-2026.05.27-000001
+  rename_pattern: .*\.ds-(.+)  →  restored-$1
+Response: {"accepted":true}
+[HTTP 200]
+
+--- Restoring Backing Index 2 (000002) ---
+Request: POST _snapshot/found-snapshots/2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-r1bxittntvmgzxgpcbxzwa/_restore
+  indices: fm-clone-ua9t-.ds-logs-mytest-default-2026.05.27-000002
+Response: {"accepted":true}
+[HTTP 200]
+
+Waiting 10s for restores to complete...
+--- Restored index status ---
+index status health docs.count store.size
+
+  Poll 1: restore still in progress, waiting 5s...
+  Poll 2: restore still in progress, waiting 5s...
+  Poll 3: restore still in progress, waiting 5s...
+  Poll 4: restore still in progress, waiting 5s...
+  Poll 5: restore still in progress, waiting 5s...
+  Poll 6: restore still in progress, waiting 5s...
+  Poll 7: restore still in progress, waiting 5s...
+  Poll 8: restore still in progress, waiting 5s...
+  Poll 9: restore still in progress, waiting 5s...
+  Poll 10: restore still in progress, waiting 5s...
+  Poll 11: restore still in progress, waiting 5s...
+  Poll 12: restore still in progress, waiting 5s...
+
+✓ Restore complete:
+  restored-logs-mytest-default-2026.05.27-000001: 1 doc  (Doc 1)
+  restored-logs-mytest-default-2026.05.27-000002: 2 docs (Doc 2 + Doc 3)
+
+--- Checking index.hidden setting on restored indices ---
+restored-logs-mytest-default-2026.05.27-000001: index.hidden = true
+
+--- Removing index.hidden=true on restored indices ---
+  restored-logs-mytest-default-2026.05.27-000001 → {"acknowledged":true}[HTTP 200]
+  restored-logs-mytest-default-2026.05.27-000002 → {"acknowledged":true}[HTTP 200]
+
+=====================================================================
+Step 7: Querying the Restored Indices
+=====================================================================
+NOTE: index.hidden was set to false on both restored indices.
+
+--- GET restored-logs-mytest-*/_search ---
+Total hits: 3
+  [restored-logs-mytest-default-2026.05.27-000001]
+    @timestamp: 2026-05-27T10:00:00.000Z
+    message:    Log event 1 in backing index 1
+  [restored-logs-mytest-default-2026.05.27-000002]
+    @timestamp: 2026-05-27T10:05:00.000Z
+    message:    Log event 2 in backing index 2
+  [restored-logs-mytest-default-2026.05.27-000002]
+    @timestamp: 2026-05-27T10:10:00.000Z
+    message:    Log event 3 in backing index 3
+
+--- Individual index query: restored-...-000001 ---
+hits: 1
+  {'@timestamp': '2026-05-27T10:00:00.000Z', 'message': 'Log event 1 in backing index 1'}
+
+--- Individual index query: restored-...-000002 ---
+hits: 2
+  {'@timestamp': '2026-05-27T10:05:00.000Z', 'message': 'Log event 2 in backing index 2'}
+  {'@timestamp': '2026-05-27T10:10:00.000Z', 'message': 'Log event 3 in backing index 3'}
+
+=====================================================================
+Step 8: Snapshot Cleanup (delete ILM-created snapshots for 000001 and 000002)
+=====================================================================
+In production: schedule cleanup_old_snapshots.sh for snapshots older than 2 years.
+
+--- DELETE _snapshot/found-snapshots/2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-u1dysmjssdmm40fziw6_uw ---
+Response: {"acknowledged":true}[HTTP 200]
+
+--- DELETE _snapshot/found-snapshots/2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-r1bxittntvmgzxgpcbxzwa ---
+Response: {"acknowledged":true}[HTTP 200]
+
+=====================================================================
+Step 9: Environment Cleanup
+=====================================================================
+--- Reset ILM poll interval to default ---
+PUT _cluster/settings → {"acknowledged":true,"persistent":{},"transient":{}}[HTTP 200]
+
+--- DELETE _data_stream/logs-mytest-default ---
+Response: {"acknowledged":true}[HTTP 200]
+
+--- DELETE restored-logs-mytest-* ---
+Response: {"acknowledged":true}[HTTP 200]
+
+--- DELETE _ilm/policy/approach_a_ds_policy ---
+Response: {"acknowledged":true}[HTTP 200]
+
+--- DELETE _index_template/approach_a_ds_template ---
+Response: {"acknowledged":true}[HTTP 200]
+
+--- Final state verification ---
+  data stream  logs-mytest-default      → 404  ✓ gone
+  ILM policy   approach_a_ds_policy     → 404 ✓ gone
+  template     approach_a_ds_template   → 404 ✓ gone
+  restored-*   (expect 200 w/ 0 hits)   → 200
+
+
+=====================================================================
+TEST COMPLETE — All steps executed and environment cleaned up.
+=====================================================================

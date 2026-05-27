@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ILM + SLM Data Lifecycle — v8.19</title>
+<style>
+/* ── Base ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #1a1b21;
+  --surface:  #25262e;
+  --surface2: #2f3040;
+  --border:   #3d3f52;
+  --text:     #e0e1ea;
+  --muted:    #8a8ba8;
+  --hot:      #f0813a;
+  --hot-bg:   #3a230d;
+  --hot-bd:   #8a3d10;
+  --frozen:   #4ec9b0;
+  --frozen-bg:#0d2e2a;
+  --frozen-bd:#1d6b5e;
+  --ilm:      #4EAA50;
+  --ilm-bg:   #0d2210;
+  --ilm-bd:   #2a6b2c;
+  --slm:      #5b9bd5;
+  --slm-bg:   #0d1e2e;
+  --slm-bd:   #2a5080;
+  --del:      #888;
+  --del-bg:   #2a2a2a;
+  --del-bd:   #555;
+  --ok:       #4EAA50;
+  --err:      #e05252;
+  --accent:   #00bfb3;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
+
+/* ── Deck ────────────────────────────────────────────────────── */
+#deck { width: 100vw; height: 100vh; position: relative; }
+.slide {
+  position: absolute; inset: 0;
+  display: none; flex-direction: column;
+  padding: 40px 60px 80px;
+  overflow: hidden;
+}
+.slide.active { display: flex; }
+
+/* ── Controls ────────────────────────────────────────────────── */
+#controls {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  padding: 10px; background: rgba(26,27,33,0.92); border-top: 1px solid var(--border);
+  z-index: 100;
+}
+#controls button {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 18px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  transition: background 0.15s;
+}
+#controls button:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+#slide-counter { font-size: 13px; color: var(--muted); min-width: 60px; text-align: center; }
+/* progress bar */
+#progress { position: fixed; bottom: 44px; left: 0; height: 2px; background: var(--accent); transition: width 0.3s; z-index: 101; }
+
+/* ── Typography ──────────────────────────────────────────────── */
+h1 { font-size: 2.6rem; font-weight: 700; color: var(--accent); margin-bottom: 8px; line-height: 1.15; }
+h2 { font-size: 1.7rem; font-weight: 600; color: var(--accent); margin-bottom: 18px; }
+h3 { font-size: 1.15rem; font-weight: 600; color: var(--muted); margin-bottom: 10px; letter-spacing: .04em; text-transform: uppercase; }
+p  { font-size: 1rem; color: var(--text); line-height: 1.6; }
+.subtitle { font-size: 1.1rem; color: var(--muted); margin-bottom: 6px; }
+.tag {
+  display: inline-block; font-size: 0.75rem; padding: 2px 10px; border-radius: 20px;
+  font-weight: 600; letter-spacing: .04em; text-transform: uppercase; margin-right: 6px;
+}
+.tag.hot    { background: var(--hot-bg);    color: var(--hot);    border: 1px solid var(--hot-bd);    }
+.tag.frozen { background: var(--frozen-bg); color: var(--frozen); border: 1px solid var(--frozen-bd); }
+.tag.ilm    { background: var(--ilm-bg);    color: var(--ilm);    border: 1px solid var(--ilm-bd);    }
+.tag.slm    { background: var(--slm-bg);    color: var(--slm);    border: 1px solid var(--slm-bd);    }
+.tag.del    { background: var(--del-bg);    color: var(--del);    border: 1px solid var(--del-bd);    }
+.ok  { color: var(--ok);  font-weight: 700; }
+.err { color: var(--err); font-weight: 700; }
+
+/* ── Layout helpers ──────────────────────────────────────────── */
+.row  { display: flex; gap: 20px; align-items: flex-start; }
+.col  { display: flex; flex-direction: column; gap: 10px; }
+.fill { flex: 1; }
+.center { align-items: center; justify-content: center; }
+.vmid { align-items: center; }
+
+/* ── Card ────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 18px 22px;
+}
+.card h3 { font-size: 0.78rem; }
+
+/* ── State diagram ───────────────────────────────────────────── */
+.state-diagram {
+  display: flex; gap: 24px; align-items: stretch;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px;
+}
+.zone { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.zone-title {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.tier-box {
+  border-radius: 8px; padding: 10px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  min-height: 52px;
+}
+.tier-box.hot    { background: var(--hot-bg);    border: 1px solid var(--hot-bd);    }
+.tier-box.frozen { background: var(--frozen-bg); border: 1px solid var(--frozen-bd); }
+.tier-box.ilm    { background: var(--ilm-bg);    border: 1px solid var(--ilm-bd);    }
+.tier-box.slm    { background: var(--slm-bg);    border: 1px solid var(--slm-bd);    }
+.tier-box.del    { background: var(--del-bg);    border: 1px solid var(--del-bd);    opacity: .6; }
+.tier-label { font-size: 0.72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.tier-box.hot    .tier-label { color: var(--hot);    }
+.tier-box.frozen .tier-label { color: var(--frozen); }
+.tier-box.ilm    .tier-label { color: var(--ilm);    }
+.tier-box.slm    .tier-label { color: var(--slm);    }
+.tier-box.del    .tier-label { color: var(--del);    }
+.idx {
+  font-size: 0.78rem; font-family: "Cascadia Code", "Fira Code", monospace;
+  padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05);
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.idx .doc { font-size: 0.68rem; color: var(--muted); }
+.idx.gone { text-decoration: line-through; opacity: .5; }
+.empty { font-size: 0.78rem; color: var(--muted); font-style: italic; padding: 4px 8px; }
+.snap-item {
+  font-size: 0.78rem; font-family: "Cascadia Code", "Fira Code", monospace;
+  padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05);
+  line-height: 1.6;
+}
+.snap-item .snap-contents { font-size: 0.68rem; color: var(--muted); }
+.snap-item.gone { text-decoration: line-through; opacity: .4; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+.arrow-col {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; color: var(--muted); padding: 0 4px; flex-shrink: 0;
+}
+
+/* ── Phase timeline ──────────────────────────────────────────── */
+.phase-flow {
+  display: flex; align-items: stretch; gap: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.phase-step {
+  flex: 1; padding: 14px 16px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.phase-step:last-child { border-right: none; }
+.phase-step .p-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.phase-step .p-name  { font-size: 0.92rem; font-weight: 600; }
+.phase-step .p-desc  { font-size: 0.75rem; color: var(--muted); line-height: 1.4; }
+.phase-step.hot    { border-top: 3px solid var(--hot);    }
+.phase-step.frozen { border-top: 3px solid var(--frozen); }
+.phase-step.delete { border-top: 3px solid var(--err);    }
+
+/* ── Policy block ────────────────────────────────────────────── */
+.policy-row {
+  display: flex; gap: 16px;
+}
+.policy-phase {
+  flex: 1; border-radius: 8px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.policy-phase.hot    { background: var(--hot-bg);    border: 1px solid var(--hot-bd);    }
+.policy-phase.frozen { background: var(--frozen-bg); border: 1px solid var(--frozen-bd); }
+.policy-phase.delete { background: #2e1010;          border: 1px solid #8a2020;          }
+.policy-phase .ph-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.policy-phase.hot    .ph-label { color: var(--hot);    }
+.policy-phase.frozen .ph-label { color: var(--frozen); }
+.policy-phase.delete .ph-label { color: var(--err);    }
+.policy-phase .ph-rule { font-size: 0.85rem; font-family: "Cascadia Code", "Fira Code", monospace; margin-top: 4px; }
+.policy-phase .ph-note { font-size: 0.75rem; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+.phase-arrow { display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: var(--muted); padding: 0 4px; flex-shrink: 0; }
+
+/* ── Highlight box ───────────────────────────────────────────── */
+.highlight {
+  border-radius: 8px; padding: 14px 18px; font-size: 0.92rem; line-height: 1.5;
+}
+.highlight.ok  { background: #0d2210; border: 1px solid var(--ilm-bd); color: var(--ilm);  }
+.highlight.err { background: #2e1010; border: 1px solid #8a2020;       color: var(--err);  }
+.highlight.warn{ background: #2e2210; border: 1px solid #8a6020;       color: #d4a017;     }
+.highlight.info{ background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+
+/* ── Bullet list ──────────────────────────────────────────────── */
+ul.blist { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+ul.blist li { display: flex; gap: 10px; font-size: 0.9rem; line-height: 1.5; }
+ul.blist li::before { content: "▸"; color: var(--accent); flex-shrink: 0; }
+ul.blist li.ok-item::before  { content: "✓"; color: var(--ok);  }
+ul.blist li.err-item::before { content: "✗"; color: var(--err); }
+
+/* ── Comparison table ────────────────────────────────────────── */
+.compare-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.compare-table th, .compare-table td { padding: 10px 14px; border: 1px solid var(--border); text-align: left; }
+.compare-table thead { background: var(--surface2); }
+.compare-table thead th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.compare-table tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+.compare-table .ok-cell  { color: var(--ok);  }
+.compare-table .err-cell { color: var(--err); }
+.compare-table .col-ilm  { border-left: 3px solid var(--ilm); }
+.compare-table .col-slm  { border-left: 3px solid var(--slm); }
+
+/* ── Code block ───────────────────────────────────────────────── */
+code {
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.8rem; background: var(--surface2);
+  padding: 2px 6px; border-radius: 4px; color: #a8d8a8;
+}
+.codeblock {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 16px; font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.78rem; line-height: 1.6; color: #c8d8c8; white-space: pre;
+}
+
+/* ── Misc ────────────────────────────────────────────────────── */
+.spacer { flex: 1; }
+.mt8  { margin-top: 8px;  }
+.mt12 { margin-top: 12px; }
+.mt16 { margin-top: 16px; }
+.mt20 { margin-top: 20px; }
+.mb8  { margin-bottom: 8px; }
+.note { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+.pill {
+  display: inline-block; font-size: 0.72rem; font-weight: 700;
+  padding: 1px 9px; border-radius: 20px; vertical-align: middle;
+}
+.pill.hot    { background: var(--hot);    color: #1a0a00; }
+.pill.frozen { background: var(--frozen); color: #001a16; }
+.pill.ilm    { background: var(--ilm);    color: #001a03; }
+.pill.slm    { background: var(--slm);    color: #001020; }
+.pill.del    { background: var(--del);    color: #000;    }
+.pill.err    { background: var(--err);    color: #fff;    }
+.pill.ok     { background: var(--ok);     color: #001a03; }
+.version-badge {
+  display: inline-block; background: var(--accent); color: #000;
+  font-weight: 700; font-size: 0.8rem; padding: 3px 14px; border-radius: 20px;
+  margin-bottom: 16px;
+}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<div id="deck">
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 1 — Title
+═══════════════════════════════════════════════════════════ -->
+<section class="slide active" id="s1">
+  <div class="spacer"></div>
+  <div>
+    <span class="version-badge">Elasticsearch v8.19 · Elastic Cloud</span>
+    <h1>ILM + SLM<br/>Data Lifecycle</h1>
+    <p class="subtitle mt12">Frozen-Tier Backing Index Recovery — What Survives &amp; What Doesn't</p>
+    <div class="mt20 row vmid" style="gap:10px; flex-wrap:wrap;">
+      <span class="tag hot">Hot Tier</span>
+      <span style="font-size:1rem;color:var(--muted)">→</span>
+      <span class="tag frozen">Frozen Tier</span>
+      <span style="font-size:1rem;color:var(--muted)">→</span>
+      <span class="tag del">Deleted from cluster</span>
+      <span style="font-size:1rem;color:var(--muted)">→ recover via</span>
+      <span class="tag ilm">ILM Snapshot ✓</span>
+      <span style="font-size:.9rem;color:var(--muted)">or</span>
+      <span class="tag slm">SLM Snapshot ?</span>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="highlight warn mt16">
+    <strong>Key question:</strong> Once ILM deletes a Frozen-tier backing index and SLM retention
+    rotates past the snapshots that captured it — is the data gone?<br/>
+    <span class="note">→ This scenario proves SLM is NOT a reliable recovery path; ILM-managed snapshots are.</span>
+  </div>
+  <div class="spacer"></div>
+  <p class="note">Navigate with ← → arrow keys or the buttons below &nbsp;·&nbsp; 13 slides</p>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 2 — ILM Policy
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s2">
+  <h2>ILM Policy — <code>approach_a_ds_policy</code></h2>
+  <p class="note mb8">Governs how each <strong>backing index</strong> of the data stream moves through tiers and is ultimately deleted.</p>
+
+  <div class="policy-row mt16">
+    <div class="policy-phase hot">
+      <div class="ph-label">① Hot</div>
+      <div class="ph-rule">rollover: max_docs: 1</div>
+      <div class="ph-note">As soon as one document is ingested, ILM rolls over — creating the next backing index. The current one moves toward Frozen.</div>
+    </div>
+    <div class="phase-arrow">→</div>
+    <div class="policy-phase frozen">
+      <div class="ph-label">② Frozen</div>
+      <div class="ph-rule">min_age: 0m<br/>searchable_snapshot:<br/>  repo: found-snapshots</div>
+      <div class="ph-note">ILM immediately takes a searchable snapshot of the backing index, mounts it as <code>partial-…</code> on the frozen tier, and removes the original shards.</div>
+    </div>
+    <div class="phase-arrow">→</div>
+    <div class="policy-phase delete">
+      <div class="ph-label">③ Delete</div>
+      <div class="ph-rule">min_age: 3m<br/>delete_searchable_snapshot: false ⚠️</div>
+      <div class="ph-note">After 3 minutes the frozen mount is removed from the cluster — <strong>but the underlying ILM snapshot is kept</strong> in <code>found-snapshots</code>.<br/>This is what enables restore later.</div>
+    </div>
+  </div>
+
+  <div class="highlight info mt20">
+    <strong>Critical setting:</strong> <code>"delete_searchable_snapshot": false</code><br/>
+    This tells ILM: "unmount the frozen index, but do <em>not</em> delete the snapshot from the repository."<br/>
+    Without this flag set to <code>false</code>, the snapshot would be deleted along with the index — and recovery would be impossible.
+  </div>
+
+  <div class="mt16 row" style="gap:16px;">
+    <div class="card fill">
+      <h3>What ILM snapshots look like (v8.19)</h3>
+      <p class="note mt8">Named: <code>&lt;YYYY.MM.DD&gt;-&lt;index-name&gt;-&lt;policy&gt;-&lt;uuid&gt;</code></p>
+      <p class="note mt8">In v8.x, ILM force-merges the <strong>original</strong> backing index in place — so the snapshot contains the raw <code>.ds-…</code> name (no <code>fm-clone-</code> prefix).</p>
+      <p class="note mt8" style="color:var(--accent)">Contrast with v9.2+: ILM clones to <code>fm-clone-&lt;uuid&gt;-</code>, snapshots the clone — different restore rename_pattern needed.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 3 — SLM Policy
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s3">
+  <h2>SLM Policy — <code>approach_a_slm_policy</code></h2>
+  <p class="note mb8">A cluster-wide snapshot policy, manually executed at precise moments to demonstrate its limitations.</p>
+
+  <div class="row mt16" style="gap:20px; align-items:stretch;">
+    <div class="card fill">
+      <h3>Configuration</h3>
+      <div class="codeblock mt8">name:       &lt;approach-a-slm-{now/d}&gt;
+schedule:   "0 0 0 1 1 ? 2099"  ← never fires automatically
+repository: found-snapshots
+config:
+  indices: "*"           ← captures everything
+  partial:  true         ← survives rollover transitions
+retention:
+  expire_after: 30d
+  min_count:    1
+  max_count:    3        ← ⚠️ THIS IS THE DANGER</div>
+    </div>
+
+    <div class="col fill" style="gap:16px;">
+      <div class="tier-box slm">
+        <div class="tier-label">⚠️ The max_count: 3 Trap</div>
+        <p class="note mt8" style="color:var(--text)">SLM will only ever keep the <strong>3 newest</strong> snapshots.<br/>
+        Once you run a 4th execution, the oldest is automatically deleted by retention.<br/>
+        If that oldest snapshot was the only one that captured a now-deleted backing index — <span class="err">that data is gone.</span></p>
+      </div>
+      <div class="tier-box hot">
+        <div class="tier-label">Why partial: true matters</div>
+        <p class="note mt8" style="color:var(--text)">During a rollover, an index may be momentarily in transition. <code>partial: true</code> lets the snapshot succeed even if some shards are temporarily unavailable.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight warn mt20">
+    <strong>The core risk:</strong> SLM snapshots are cluster-wide point-in-time captures.
+    They don't know about — or care about — the ILM lifecycle of individual backing indices.
+    Once ILM deletes a backing index and SLM retention rotates past the snapshots that captured it,
+    the data is unrecoverable via SLM.
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 4 — Phase 1: Ingest Doc 1 + SLM Snap #1
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s4">
+  <h2>Phase 1 — Ingest Doc 1 &amp; Execute SLM Snap #1</h2>
+  <p class="note mb8"><em>Step 4.1 of the scenario</em> · SLM snapshot is taken <strong>before</strong> ILM rolls over — while 000001 is still on the hot tier.</p>
+
+  <div class="state-diagram mt16">
+    <!-- Cluster zone -->
+    <div class="zone">
+      <div class="zone-title">📦 Cluster (Data Tiers)</div>
+      <div class="tier-box hot">
+        <div class="tier-label">🔥 Hot Tier</div>
+        <div class="idx">.ds-…-000001 <span class="doc-count">[1 doc]</span></div>
+      </div>
+      <div class="tier-box frozen" style="opacity:.4;">
+        <div class="tier-label">🧊 Frozen Tier</div>
+        <div class="empty">— empty —</div>
+      </div>
+    </div>
+
+    <div class="arrow-col">→</div>
+
+    <!-- Snapshot zone -->
+    <div class="zone">
+      <div class="zone-title">🗄️ Snapshot Repository (found-snapshots)</div>
+      <div class="tier-box ilm">
+        <div class="tier-label">ILM Snapshots</div>
+        <div class="empty">— none yet —</div>
+      </div>
+      <div class="tier-box slm">
+        <div class="tier-label">SLM Snapshots (1/3)</div>
+        <div class="snap-item">approach-a-slm-2026.05.27-#1
+  <div class="snap-contents">contains: .ds-…-000001</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt16" style="gap:16px;">
+    <div class="highlight info fill">
+      <strong>Sequence matters:</strong> SLM is executed manually <em>before</em> ILM has a chance to roll over.
+      This guarantees snap #1 captures 000001 while it is <span class="pill hot">Hot</span> and fully present.
+    </div>
+    <div class="highlight warn fill">
+      <strong>Next:</strong> ILM detects <code>max_docs: 1</code> is satisfied (~10s poll interval) and
+      automatically rolls over — 000001 transitions to the Frozen tier.
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 5 — Phase 1 (cont.): ILM Rolls Over 000001 → Frozen
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s5">
+  <h2>Phase 1 — ILM Rolls Over 000001 → Frozen Tier</h2>
+  <p class="note mb8">ILM evaluates the rollover condition, rolls 000001 into the Frozen phase, takes an ILM searchable snapshot, and creates 000002 on Hot.</p>
+
+  <div class="state-diagram mt16">
+    <div class="zone">
+      <div class="zone-title">📦 Cluster (Data Tiers)</div>
+      <div class="tier-box hot">
+        <div class="tier-label">🔥 Hot Tier</div>
+        <div class="idx">.ds-…-000002 <span class="doc-count">[write index]</span></div>
+      </div>
+      <div class="tier-box frozen">
+        <div class="tier-label">🧊 Frozen Tier</div>
+        <div class="idx">partial-.ds-…-000001 <span class="doc-count">[mounted]</span></div>
+      </div>
+    </div>
+
+    <div class="arrow-col">→</div>
+
+    <div class="zone">
+      <div class="zone-title">🗄️ Snapshot Repository</div>
+      <div class="tier-box ilm">
+        <div class="tier-label">ILM Snapshots (1)</div>
+        <div class="snap-item">2026.05.27-.ds-…-000001-policy-&lt;uuid&gt;
+  <div class="snap-contents">contains: .ds-…-000001</div>
+        </div>
+      </div>
+      <div class="tier-box slm">
+        <div class="tier-label">SLM Snapshots (1/3)</div>
+        <div class="snap-item">approach-a-slm-2026.05.27-#1
+  <div class="snap-contents">contains: .ds-…-000001</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight info mt16">
+    <strong>v8.19 behaviour:</strong> ILM force-merges 000001 in place (no <code>fm-clone-</code> step unlike v9.2+),
+    then takes the ILM searchable snapshot containing the raw <code>.ds-…-000001</code> name.
+    The frozen mount <code>partial-.ds-…-000001</code> is a lightweight reference to this snapshot — no full copy of data.
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 6 — Phase 1 complete: All 3 docs + 3 SLM snaps
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s6">
+  <h2>Phase 1 Complete — 3 Docs, 3 SLM Snaps, 3 ILM Snaps</h2>
+  <p class="note mb8"><em>Steps 4.1–4.3</em> fully executed. Each doc was ingested, SLM fired, then ILM rolled over. 000003 is the active write index.</p>
+
+  <div class="state-diagram mt12">
+    <div class="zone">
+      <div class="zone-title">📦 Cluster (Data Tiers)</div>
+      <div class="tier-box hot">
+        <div class="tier-label">🔥 Hot Tier</div>
+        <div class="idx">.ds-…-000003 <span class="doc-count">[1 doc, write]</span></div>
+      </div>
+      <div class="tier-box frozen">
+        <div class="tier-label">🧊 Frozen Tier</div>
+        <div class="idx">partial-.ds-…-000001</div>
+        <div class="idx">partial-.ds-…-000002</div>
+      </div>
+    </div>
+
+    <div class="arrow-col">→</div>
+
+    <div class="zone">
+      <div class="zone-title">🗄️ Snapshot Repository</div>
+      <div class="tier-box ilm">
+        <div class="tier-label">ILM Snapshots (2)</div>
+        <div class="snap-item">ilm-snap-000001 <div class="snap-contents">contains: .ds-…-000001</div></div>
+        <div class="snap-item">ilm-snap-000002 <div class="snap-contents">contains: .ds-…-000002</div></div>
+      </div>
+      <div class="tier-box slm">
+        <div class="tier-label">SLM Snapshots (3/3 — at limit!)</div>
+        <div class="snap-item">slm-snap-#1 <div class="snap-contents">contains: .ds-…-000001</div></div>
+        <div class="snap-item">slm-snap-#2 <div class="snap-contents">contains: 000001, 000002</div></div>
+        <div class="snap-item">slm-snap-#3 <div class="snap-contents">contains: 000001, 000002, 000003</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight warn mt12">
+    <strong>SLM is now at capacity (3/3).</strong> Any further execution will trigger retention and delete the oldest snapshot (slm-snap-#1 — the only one that captured 000001 while it was exclusively in hot tier).
+    Meanwhile, 000003 continues to receive the ILM rollover treatment shortly.
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 7 — Phase 2: ILM Deletes 000001 & 000002
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s7">
+  <h2>Phase 2 — ILM Delete Phase Fires (3-minute age)</h2>
+  <p class="note mb8"><em>Step 5</em> · After ~3 minutes, ILM unmounts and deletes the frozen mounts.
+  The <strong>ILM snapshots remain</strong> because <code>delete_searchable_snapshot: false</code>.</p>
+
+  <div class="state-diagram mt12">
+    <div class="zone">
+      <div class="zone-title">📦 Cluster (Data Tiers)</div>
+      <div class="tier-box hot">
+        <div class="tier-label">🔥 Hot Tier</div>
+        <div class="idx">.ds-…-000003 <span class="doc-count">[active]</span></div>
+      </div>
+      <div class="tier-box del">
+        <div class="tier-label">🗑️ Deleted from Cluster</div>
+        <div class="idx gone">partial-.ds-…-000001</div>
+        <div class="idx gone">partial-.ds-…-000002</div>
+        <div class="note mt8" style="color:var(--err)">GET .ds-…-000001 → 404 Not Found</div>
+      </div>
+    </div>
+
+    <div class="arrow-col">→</div>
+
+    <div class="zone">
+      <div class="zone-title">🗄️ Snapshot Repository</div>
+      <div class="tier-box ilm">
+        <div class="tier-label">ILM Snapshots (2) ✓ SURVIVE</div>
+        <div class="snap-item" style="border-left:2px solid var(--ilm)">ilm-snap-000001
+  <div class="snap-contents">✓ .ds-…-000001 recoverable</div></div>
+        <div class="snap-item" style="border-left:2px solid var(--ilm)">ilm-snap-000002
+  <div class="snap-contents">✓ .ds-…-000002 recoverable</div></div>
+      </div>
+      <div class="tier-box slm">
+        <div class="tier-label">SLM Snapshots (3/3)</div>
+        <div class="snap-item">slm-snap-#1 <div class="snap-contents">000001 ✓ (still here)</div></div>
+        <div class="snap-item">slm-snap-#2 <div class="snap-contents">000001, 000002 ✓</div></div>
+        <div class="snap-item">slm-snap-#3 <div class="snap-contents">000001, 000002, 000003</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt12" style="gap:12px;">
+    <div class="highlight ok fill">
+      <strong>ILM snapshots:</strong> Intact and recoverable.
+      The <code>delete_searchable_snapshot: false</code> setting preserved them even though the cluster-side mounts are gone.
+    </div>
+    <div class="highlight info fill">
+      <strong>SLM snapshots:</strong> Also intact <em>for now</em> — but the clock is ticking.
+      The retention counter hasn't been exceeded yet. We'll test this next.
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 8 — ✅ ILM Restore Succeeds
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s8">
+  <h2>✅ Recovery A — Restore via ILM Snapshot</h2>
+  <p class="note mb8"><em>Step 6</em> · Run the bash script (or Dev Tools equivalent) to restore the deleted backing indices from their ILM snapshots.</p>
+
+  <div class="state-diagram mt12">
+    <div class="zone">
+      <div class="zone-title">📦 Cluster (after restore)</div>
+      <div class="tier-box ilm" style="border-color:var(--ilm);">
+        <div class="tier-label" style="color:var(--ilm)">Restored Indices (hot tier)</div>
+        <div class="idx">restored-logs-mytest-…-000001 <span class="doc-count">[1 doc ✓]</span></div>
+        <div class="idx">restored-logs-mytest-…-000002 <span class="doc-count">[1 doc ✓]</span></div>
+      </div>
+      <div class="tier-box del" style="margin-top:6px;">
+        <div class="tier-label">Still deleted (original)</div>
+        <div class="idx gone">.ds-…-000001</div>
+        <div class="idx gone">.ds-…-000002</div>
+      </div>
+    </div>
+    <div class="arrow-col">→</div>
+    <div class="zone">
+      <div class="zone-title">🗄️ Snapshot Repository</div>
+      <div class="tier-box ilm">
+        <div class="tier-label">ILM Snapshots (unchanged)</div>
+        <div class="snap-item">ilm-snap-000001 <div class="snap-contents">✓ used for restore</div></div>
+        <div class="snap-item">ilm-snap-000002 <div class="snap-contents">✓ used for restore</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt12">
+    <h3>Restore command pattern (v8.19)</h3>
+    <div class="codeblock mt8">POST _snapshot/found-snapshots/&lt;ilm_snapshot_name&gt;/_restore
+{
+  "indices": ".ds-logs-mytest-default-2026.05.27-000001",
+  "rename_pattern": "\\.ds-(.+)",          ← strips ".ds-" prefix
+  "rename_replacement": "restored-$1",     ← renames to "restored-…"
+  "index_settings": {
+    "index.lifecycle.name": null,          ← detach from ILM
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}</div>
+  </div>
+
+  <div class="highlight ok mt12">
+    <strong>⚠️ Remember:</strong> Restored indices inherit <code>index.hidden = true</code> from the backing index.
+    Run <code>PUT restored-…/_settings {"index": {"hidden": false}}</code> before wildcard searches will find them.
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 9 — ✅ SLM Restore (still works at this point)
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s9">
+  <h2>✅ Recovery B — Restore via SLM Snapshot (Step 7.5)</h2>
+  <p class="note mb8">At this point, only 3 SLM executions have run and max_count=3, so <strong>none have been deleted yet</strong>. SLM snap #1 still contains 000001.</p>
+
+  <div class="state-diagram mt12">
+    <div class="zone">
+      <div class="zone-title">📦 SLM Restore Result</div>
+      <div class="tier-box slm" style="border-color:var(--slm);">
+        <div class="tier-label" style="color:var(--slm)">SLM-Restored Index</div>
+        <div class="idx">restored-slm-logs-mytest-…-000001 <span class="doc-count">[1 doc ✓]</span></div>
+        <div class="note mt8" style="color:var(--text)">Used prefix <code>restored-slm-</code> to avoid collision with ILM restore</div>
+      </div>
+    </div>
+    <div class="arrow-col">←</div>
+    <div class="zone">
+      <div class="zone-title">🗄️ SLM Snapshot used</div>
+      <div class="tier-box slm">
+        <div class="tier-label">slm-snap-#1 (oldest)</div>
+        <div class="snap-item">Captured 000001 when it was still <span class="pill hot">Hot</span>
+  <div class="snap-contents">✓ index present in this snapshot</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt12" style="gap:12px;">
+    <div class="highlight ok fill">
+      <strong>✓ Succeeds — for now.</strong> The snapshot that captured 000001 while it was alive still exists.
+      Retention hasn't run since we've only done exactly 3 executions (= max_count).
+    </div>
+    <div class="highlight warn fill">
+      <strong>But this window is fragile.</strong> The moment a 4th SLM execution runs and retention fires,
+      slm-snap-#1 will be deleted — and with it, the last SLM copy of 000001.
+    </div>
+  </div>
+
+  <div class="note mt12">
+    Next slide: we run 3 more SLM executions and trigger retention — watching the window close.
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 10 — SLM Retention Rotation
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s10">
+  <h2>SLM Retention Fires — Oldest 3 Snapshots Deleted (Step 7.6)</h2>
+  <p class="note mb8">3 more SLM executions → 6 total → retention keeps newest 3, deletes oldest 3 (snaps #1, #2, #3).</p>
+
+  <div class="state-diagram mt12">
+    <div class="zone">
+      <div class="zone-title">🗄️ SLM Snapshots — BEFORE retention</div>
+      <div class="tier-box slm" style="opacity:.5;">
+        <div class="tier-label">To be deleted (too old)</div>
+        <div class="snap-item gone">slm-snap-#1 · {000001}</div>
+        <div class="snap-item gone">slm-snap-#2 · {000001, 000002}</div>
+        <div class="snap-item gone">slm-snap-#3 · {000001, 000002, 000003}</div>
+      </div>
+      <div class="tier-box slm" style="margin-top:8px;">
+        <div class="tier-label">Kept (newest 3)</div>
+        <div class="snap-item">slm-snap-#4 · {000003} <div class="snap-contents">taken after 000001 already deleted</div></div>
+        <div class="snap-item">slm-snap-#5 · {000003} <div class="snap-contents">taken after 000001 already deleted</div></div>
+        <div class="snap-item">slm-snap-#6 · {000003} <div class="snap-contents">taken after 000001 already deleted</div></div>
+      </div>
+    </div>
+
+    <div class="arrow-col">→</div>
+
+    <div class="zone">
+      <div class="zone-title">💀 Result</div>
+      <div class="tier-box del" style="margin-bottom:8px;">
+        <div class="tier-label">000001 status</div>
+        <div class="note" style="color:var(--err); margin-top:6px;">
+          ✗ Not in cluster (ILM deleted)<br/>
+          ✗ Not in any surviving SLM snapshot<br/>
+          ✓ Only in ILM snapshot (ilm-snap-000001)
+        </div>
+      </div>
+      <div class="tier-box ilm">
+        <div class="tier-label">ILM Snapshots — unchanged</div>
+        <div class="snap-item">ilm-snap-000001 <div class="snap-contents">✓ still intact</div></div>
+        <div class="snap-item">ilm-snap-000002 <div class="snap-contents">✓ still intact</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight err mt12">
+    <strong>The SLM recovery window has closed.</strong>
+    Snaps #4–#6 were all taken after ILM had already deleted 000001 from the cluster.
+    Those snapshots physically cannot contain an index that no longer existed at snapshot time.
+    SLM retention deleted the only snapshots that did contain it.
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 11 — ❌ SLM Restore Fails
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s11">
+  <h2>❌ Recovery B′ — SLM Restore Fails (Step 7.6 cont.)</h2>
+  <p class="note mb8">Attempting to restore 000001 from the newest surviving SLM snapshot (snap #6) — which was taken after ILM already deleted it.</p>
+
+  <div class="row mt16" style="gap:20px; align-items:flex-start;">
+    <div class="col fill" style="gap:14px;">
+      <div class="card">
+        <h3>Restore attempt</h3>
+        <div class="codeblock mt8">POST _snapshot/found-snapshots/&lt;slm-snap-#6&gt;/_restore
+{
+  "indices": ".ds-logs-mytest-default-2026.05.27-000001",
+  "rename_pattern":     "\\.ds-(.+)",
+  "rename_replacement": "restored-slm-late-$1",
+  ...
+}</div>
+      </div>
+
+      <div class="highlight err">
+        <strong>❌ Expected error response:</strong><br/>
+        <code style="color:#ff8080">{
+  "error": {
+    "type": "index_not_found_exception",
+    "reason": "no such index
+      [.ds-logs-mytest-default-2026.05.27-000001]",
+    "index": ".ds-…-000001"
+  },
+  "status": 404
+}</code>
+      </div>
+    </div>
+
+    <div class="col fill" style="gap:14px;">
+      <div class="tier-box del">
+        <div class="tier-label">Why it fails</div>
+        <ul class="blist mt8">
+          <li class="err-item">Snap #6 was taken after ILM deleted 000001</li>
+          <li class="err-item">It physically does not contain that index</li>
+          <li class="err-item">Snaps #1–#3 (which did) were purged by retention</li>
+          <li class="err-item">No remaining SLM snapshot has the data</li>
+        </ul>
+      </div>
+      <div class="tier-box ilm">
+        <div class="tier-label">What still works</div>
+        <ul class="blist mt8">
+          <li class="ok-item">ILM snapshot <code>ilm-snap-000001</code> still intact</li>
+          <li class="ok-item">Restore via ILM snapshot → <span class="ok">success</span></li>
+          <li class="ok-item">Not subject to count-based rotation</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 12 — Side-by-side comparison
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s12">
+  <h2>ILM vs SLM — Reliability Comparison for Frozen-Tier Recovery</h2>
+
+  <table class="compare-table mt16">
+    <thead>
+      <tr>
+        <th>Property</th>
+        <th class="col-ilm">ILM Snapshots<br/><span style="color:var(--ilm)">delete_searchable_snapshot: false</span></th>
+        <th class="col-slm">SLM Snapshots<br/><span style="color:var(--slm)">max_count: 3 (or any limit)</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Snapshot scope</td>
+        <td class="col-ilm">One snapshot per backing index, tied to its lifecycle</td>
+        <td class="col-slm">Cluster-wide, captures all indices at one moment</td>
+      </tr>
+      <tr>
+        <td>Retention model</td>
+        <td class="col-ilm ok-cell">Kept until explicitly deleted (e.g., cleanup script)</td>
+        <td class="col-slm err-cell">Count/time bounded — oldest auto-deleted</td>
+      </tr>
+      <tr>
+        <td>Capture timing</td>
+        <td class="col-ilm ok-cell">Taken by ILM at the exact moment of the Frozen-phase transition</td>
+        <td class="col-slm err-cell">Taken at arbitrary scheduled/manual times — may miss windows</td>
+      </tr>
+      <tr>
+        <td>Recovery window</td>
+        <td class="col-ilm ok-cell">Unlimited — survives ILM delete phase</td>
+        <td class="col-slm err-cell">Narrow — closes once retention rotates past the capturing snapshot</td>
+      </tr>
+      <tr>
+        <td>v8.19 index name in snapshot</td>
+        <td class="col-ilm"><code>.ds-logs-mytest-…-000001</code> (raw name, no fm-clone)</td>
+        <td class="col-slm"><code>.ds-logs-mytest-…-000001</code> (same, while index exists)</td>
+      </tr>
+      <tr>
+        <td>Restore rename_pattern</td>
+        <td class="col-ilm"><code>"\\.ds-(.+)"</code> → <code>"restored-$1"</code></td>
+        <td class="col-slm"><code>"\\.ds-(.+)"</code> → <code>"restored-slm-$1"</code></td>
+      </tr>
+      <tr>
+        <td>Reliability verdict</td>
+        <td class="col-ilm ok-cell"><strong>✓ Reliable</strong> — purpose-built for this use case</td>
+        <td class="col-slm err-cell"><strong>✗ Unreliable</strong> — will eventually lose the data</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight warn mt16">
+    <strong>v9.2+ note:</strong> In v9.2+, ILM creates a <code>fm-clone-&lt;uuid&gt;-.ds-…</code> copy before snapshotting.
+    The ILM snapshot contains the clone name — not the raw <code>.ds-…</code> name.
+    Use <code>rename_pattern: ".*\\.ds-(.+)"</code> to strip the clone prefix during restore.
+    SLM behaviour and its retention problem are identical across versions.
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SLIDE 13 — Key Takeaway
+═══════════════════════════════════════════════════════════ -->
+<section class="slide" id="s13">
+  <h2>Key Takeaways</h2>
+  <div class="row mt16" style="gap:20px; align-items:stretch;">
+
+    <div class="col fill" style="gap:14px;">
+      <div class="highlight ok">
+        <strong>✅ ILM-managed snapshots are the correct recovery path for Frozen-tier data</strong>
+        <ul class="blist mt12">
+          <li class="ok-item">Set <code>"delete_searchable_snapshot": false</code> in the Delete phase</li>
+          <li class="ok-item">ILM snapshot is taken at Frozen-phase entry — before deletion</li>
+          <li class="ok-item">Survives indefinitely until you explicitly clean up</li>
+          <li class="ok-item">Use <code>restore_index_v8.19.sh</code> to recover a specific backing index by name</li>
+        </ul>
+      </div>
+
+      <div class="highlight err">
+        <strong>❌ SLM snapshots are NOT reliable for Frozen-tier backing index recovery</strong>
+        <ul class="blist mt12">
+          <li class="err-item">Retention (max_count / expire_after) rotates out snapshots unpredictably</li>
+          <li class="err-item">New snapshots taken after ILM deletion don't contain the deleted index</li>
+          <li class="err-item">The recovery window shrinks with every SLM execution</li>
+          <li class="err-item">With any realistic SLM schedule, the window closes before it's needed</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="col fill" style="gap:14px;">
+      <div class="card">
+        <h3>Architecture Recommendation</h3>
+        <div class="codeblock mt8">ILM Delete phase:
+  "delete": {
+    "min_age": "...",
+    "actions": {
+      "delete": {
+        "delete_searchable_snapshot": false  ← MUST be false
+      }
+    }
+  }
+
+Cleanup:
+  Run cleanup_old_snapshots_v8.19.sh
+  (e.g., delete ILM snaps older than 2 years)
+  — on your own schedule, not SLM's
+
+SLM:
+  Use for cluster-wide disaster recovery
+  (full cluster restore, node loss)
+  — NOT for individual index recovery after
+    Frozen-tier deletion</div>
+      </div>
+
+      <div class="highlight info">
+        <strong>Remember:</strong> After restoring, set <code>index.hidden = false</code>
+        on the restored index, or wildcard searches won't find it.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</div><!-- /#deck -->
+
+<div id="controls">
+  <button id="btn-prev">← Prev</button>
+  <span id="slide-counter">1 / 13</span>
+  <button id="btn-next">Next →</button>
+</div>
+
+<script>
+(function () {
+  const slides = document.querySelectorAll('.slide');
+  const total  = slides.length;
+  let   cur    = 0;
+  const counter  = document.getElementById('slide-counter');
+  const progress = document.getElementById('progress');
+
+  function goTo(n) {
+    slides[cur].classList.remove('active');
+    cur = Math.max(0, Math.min(n, total - 1));
+    slides[cur].classList.add('active');
+    counter.textContent = (cur + 1) + ' / ' + total;
+    progress.style.width = ((cur + 1) / total * 100) + '%';
+  }
+
+  document.getElementById('btn-prev').addEventListener('click', () => goTo(cur - 1));
+  document.getElementById('btn-next').addEventListener('click', () => goTo(cur + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown'  || e.key === ' ') goTo(cur + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                      goTo(cur - 1);
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End')  goTo(total - 1);
+  });
+
+  goTo(0);
+})();
+</script>
+</body>
+</html>

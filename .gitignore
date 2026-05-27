@@ -1,0 +1,12 @@
+# Credentials — NEVER commit these
+.env
+.env_*
+
+# macOS metadata
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+.idea/
+.vscode/

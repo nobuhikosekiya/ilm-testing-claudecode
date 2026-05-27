@@ -1,0 +1,689 @@
+======================================================================
+v8.19 SLM Variant Test Scenario — 2026-05-27T06:55:52Z
+======================================================================
+
+── STEP 1: Set ILM poll interval to 10s ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+
+── STEP 2: Create ILM policy (approach_a_ds_policy) ──
+{"acknowledged":true}
+
+── STEP 2.5: Create SLM policy (approach_a_slm_policy, max_count=3) ──
+{"acknowledged":true}
+[Verify SLM policy created]
+{
+  "name": "<approach-a-slm-{now/d}>",
+  "schedule": "0 0 0 1 1 ? 2099",
+  "max_count": 3
+}
+
+
+── STEP 3: Create index template (approach_a_ds_template) ──
+{"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"index template [approach_a_ds_template] has index patterns [logs-mytest-*] matching patterns from existing templates [approach_a_ds_template_v8] with patterns (approach_a_ds_template_v8 => [logs-mytest-v8-*]) that have the same priority [200], multiple index templates may not match during index creation, please use a different priority"}],"type":"illegal_argument_exception","reason":"index template [approach_a_ds_template] has index patterns [logs-mytest-*] matching patterns from existing templates [approach_a_ds_template_v8] with patterns (approach_a_ds_template_v8 => [logs-mytest-v8-*]) that have the same priority [200], multiple index templates may not match during index creation, please use a different priority"},"status":400}
+
+── STEP 4.1: Ingest doc 1 (→ backing index 000001) ──
+{"_index":".ds-logs-mytest-default-2026.05.27-000001","_id":"Rd03aJ4BzM_9my6C4jgV","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+[06:55:53] Executing SLM snapshot #1 immediately (before ILM rollover)...
+SLM #1 execute response: {"snapshot_name":"approach-a-slm-2026.05.27-r4bd0oo8scmqe3sf7lqdug"}
+SLM snapshot 1 name: approach-a-slm-2026.05.27-r4bd0oo8scmqe3sf7lqdug
+[06:55:53] Polling for SLM snapshot 1 completion...
+[06:55:58] SLM snapshot 1 state: SUCCESS (poll 1)
+[06:55:58] SLM snapshot 1 final state: SUCCESS
+[06:55:58] Confirm via SLM policy status (last_success):
+{
+  "last_success": "approach-a-slm-2026.05.27-r4bd0oo8scmqe3sf7lqdug",
+  "snapshots_taken": 1
+}
+[06:55:58] Waiting 25s for ILM rollover (000001 → 000002)...
+[06:56:23] Backing indices after expected rollover:
+index                                        status
+.ds-logs-mytest-v8-default-2026.05.27-000005 open
+.ds-logs-mytest-default-2026.05.27-000001    open
+
+── STEP 4.2: Ingest doc 2 (→ backing index 000002) ──
+{"_index":".ds-logs-mytest-default-2026.05.27-000001","_id":"S904aJ4BzM_9my6CWTh0","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":1,"_primary_term":1}
+[06:56:23] Executing SLM snapshot #2 immediately (before ILM rollover of 000002)...
+SLM #2 execute response: {"snapshot_name":"approach-a-slm-2026.05.27-00kycenkq6ivwb7lf3wxqg"}
+SLM snapshot 2 name: approach-a-slm-2026.05.27-00kycenkq6ivwb7lf3wxqg
+[06:56:23] Polling for SLM snapshot 2 completion...
+[06:56:29] SLM snapshot 2 state: SUCCESS (poll 1)
+[06:56:29] SLM snapshot 2 final state: SUCCESS
+[06:56:29] Confirm via SLM policy status:
+{
+  "last_success": "approach-a-slm-2026.05.27-00kycenkq6ivwb7lf3wxqg",
+  "snapshots_taken": 2
+}
+[06:56:29] Waiting 25s for ILM rollover (000002 → 000003)...
+[06:56:54] Backing indices after expected rollover:
+index                                        status
+.ds-logs-mytest-v8-default-2026.05.27-000005 open
+.ds-logs-mytest-default-2026.05.27-000001    open
+
+── STEP 4.3: Ingest doc 3 (→ backing index 000003) ──
+{"_index":".ds-logs-mytest-default-2026.05.27-000001","_id":"Td04aJ4BzM_9my6C0DjM","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":2,"_primary_term":1}
+[06:56:54] Executing SLM snapshot #3...
+SLM #3 execute response: {"snapshot_name":"approach-a-slm-2026.05.27-cccoqvmiq9g_vigmxaz99a"}
+SLM snapshot 3 name: approach-a-slm-2026.05.27-cccoqvmiq9g_vigmxaz99a
+[06:56:54] Polling for SLM snapshot 3 completion...
+[06:56:59] SLM snapshot 3 state: SUCCESS (poll 1)
+[06:56:59] SLM snapshot 3 final state: SUCCESS
+[06:56:59] Confirm via SLM policy status:
+{
+  "last_success": "approach-a-slm-2026.05.27-cccoqvmiq9g_vigmxaz99a",
+  "snapshots_taken": 3
+}
+
+[06:56:59] All SLM snapshots — should see exactly 3 (approach-a-slm-*):
+[
+  {
+    "snapshot": "approach-a-slm-2026.05.27-cccoqvmiq9g_vigmxaz99a",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779865014369
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-00kycenkq6ivwb7lf3wxqg",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779864983948
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-r4bd0oo8scmqe3sf7lqdug",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779864953328
+  }
+]
+
+── Steps 1-4.3 COMPLETE ──
+[06:57:00] Snapshot names saved. Proceeding to Step 5 monitoring...
+
+======================================================================
+⚠️  STEP 3 FAILED — RESTART INITIATED at 2026-05-27T06:59:04Z
+======================================================================
+Root cause: approach_a_ds_template_v8 (pattern logs-mytest-v8-*, priority 200)
+  conflicts with new template approach_a_ds_template (pattern logs-mytest-*, priority 200).
+  Elasticsearch rejects equal-priority templates whose patterns overlap.
+Consequence: data stream used built-in 'logs' template; ILM policy not applied;
+  ILM rollover never fired; all 3 docs landed in 000001 (no 000002/000003 created).
+  All 3 SLM snapshots captured identical state.
+
+Fix: delete bad state, recreate template at priority 201, re-run Steps 3-4.
+
+── [FIX] Delete data stream (logs-mytest-default) ──
+{"acknowledged":true}
+── [FIX] Delete 3 bad SLM snapshots ──
+  Deleting: approach-a-slm-2026.05.27-r4bd0oo8scmqe3sf7lqdug
+{"acknowledged":true}
+  Deleting: approach-a-slm-2026.05.27-00kycenkq6ivwb7lf3wxqg
+{"acknowledged":true}
+  Deleting: approach-a-slm-2026.05.27-cccoqvmiq9g_vigmxaz99a
+{"acknowledged":true}
+
+── [RETRY] STEP 3: Create index template (approach_a_ds_template, priority 201) ──
+{"acknowledged":true}
+[Verify template created]
+{
+  "name": "approach_a_ds_template",
+  "patterns": [
+    "logs-mytest-*"
+  ],
+  "priority": 201
+}
+
+======================================================================
+── STEP 4 RESTART at 2026-05-27T06:59:43Z ──
+======================================================================
+
+── STEP 4.1: Ingest doc 1 (→ backing index 000001) ──
+{"_index":".ds-logs-mytest-default-2026.05.27-000001","_id":"T907aJ4BzM_9my6CfDiz","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+[06:59:49] Created in: .ds-logs-mytest-default-2026.05.27-000001
+
+[06:59:49] Executing SLM snapshot #1 immediately (before ILM rollover)...
+SLM #1 execute: {"snapshot_name":"approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq"}
+SLM snapshot 1 name: approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq
+[06:59:49] Polling for SLM snapshot 1 completion...
+[06:59:54] SLM snapshot 1 state: SUCCESS (poll 1)
+[06:59:54] SLM policy status (last_success):
+{
+  "last_success": "approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq",
+  "snapshots_taken": 4
+}
+
+[06:59:54] Waiting 30s for ILM to evaluate rollover (max_docs:1) and roll 000001→000002...
+[07:00:24] Backing indices (expecting 000001 rolled + 000002 write):
+index                                     status docs.count
+.ds-logs-mytest-default-2026.05.27-000002 open            0
+[07:00:25] ILM explain for 000001:
+jq: error (at <stdin>:0): null (null) has no keys
+
+── STEP 4.2: Ingest doc 2 (→ backing index 000002) ──
+{"_index":".ds-logs-mytest-default-2026.05.27-000002","_id":"Zd08aJ4BzM_9my6CBzj4","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+[07:00:25] Created in: .ds-logs-mytest-default-2026.05.27-000002
+
+[07:00:25] Executing SLM snapshot #2 immediately (before ILM rollover of 000002)...
+SLM #2 execute: {"snapshot_name":"approach-a-slm-2026.05.27-ifavy3pbsxgujc4gt8vsva"}
+SLM snapshot 2 name: approach-a-slm-2026.05.27-ifavy3pbsxgujc4gt8vsva
+[07:00:25] Polling for SLM snapshot 2 completion...
+[07:00:30] SLM snapshot 2 state: SUCCESS (poll 1)
+[07:00:30] SLM policy status:
+{
+  "last_success": "approach-a-slm-2026.05.27-ifavy3pbsxgujc4gt8vsva",
+  "snapshots_taken": 5
+}
+
+[07:00:30] Waiting 30s for ILM rollover (000002→000003)...
+[07:01:00] Backing indices:
+index                                     status docs.count
+.ds-logs-mytest-default-2026.05.27-000002 open            1
+.ds-logs-mytest-default-2026.05.27-000004 open            0
+[07:01:00] ILM explain for 000002:
+(index not yet visible)
+
+── STEP 4.3: Ingest doc 3 (→ backing index 000003) ──
+{"_index":".ds-logs-mytest-default-2026.05.27-000004","_id":"f908aJ4BzM_9my6Ckjjn","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+[07:01:00] Created in: .ds-logs-mytest-default-2026.05.27-000004
+
+[07:01:00] Executing SLM snapshot #3...
+SLM #3 execute: {"snapshot_name":"approach-a-slm-2026.05.27-5en9jldltxozc3fpwsvghw"}
+SLM snapshot 3 name: approach-a-slm-2026.05.27-5en9jldltxozc3fpwsvghw
+[07:01:00] Polling for SLM snapshot 3 completion...
+[07:01:05] SLM snapshot 3 state: SUCCESS (poll 1)
+[07:01:05] SLM policy status (should show snapshots_taken: 3):
+{
+  "last_success": "approach-a-slm-2026.05.27-5en9jldltxozc3fpwsvghw",
+  "snapshots_taken": 6
+}
+
+[07:01:06] All SLM snapshots (approach-a-slm-*) — expect exactly 3:
+[
+  {
+    "snapshot": "approach-a-slm-2026.05.27-5en9jldltxozc3fpwsvghw",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-ifavy3pbsxgujc4gt8vsva",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq",
+    "state": "SUCCESS"
+  }
+]
+
+── Step 4 COMPLETE ──
+SLM snap1: approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq
+SLM snap2: approach-a-slm-2026.05.27-ifavy3pbsxgujc4gt8vsva
+SLM snap3: approach-a-slm-2026.05.27-5en9jldltxozc3fpwsvghw
+doc 1 → 
+doc 2 → .ds-logs-mytest-default-2026.05.27-000002
+doc 3 → .ds-logs-mytest-default-2026.05.27-000004
+
+── STEP 5: Monitor ILM Deletion of Backing Indices ──
+[07:03:26] Starting monitoring loop. Polling every 15s.
+[07:03:26] Waiting for partial-.ds-logs-mytest-default-2026.05.27-000001 and -000002 to be deleted.
+
+[07:03:26] --- poll tick ---
+[07:03:26] Backing indices:
+[07:03:26]   partial-.ds-logs-mytest-default-2026.05.27-000002
+[07:03:26]   partial-.ds-logs-mytest-default-2026.05.27-000004
+[07:03:26]   .ds-logs-mytest-default-2026.05.27-000005
+[07:03:26] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:03:41] --- poll tick ---
+[07:03:41] Backing indices:
+[07:03:41]   partial-.ds-logs-mytest-default-2026.05.27-000002
+[07:03:41]   partial-.ds-logs-mytest-default-2026.05.27-000004
+[07:03:41]   .ds-logs-mytest-default-2026.05.27-000005
+[07:03:41] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:03:57] --- poll tick ---
+[07:03:57] Backing indices:
+[07:03:57]   partial-.ds-logs-mytest-default-2026.05.27-000002
+[07:03:57]   partial-.ds-logs-mytest-default-2026.05.27-000004
+[07:03:57]   .ds-logs-mytest-default-2026.05.27-000005
+[07:03:57] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:04:12] --- poll tick ---
+[07:04:12] Backing indices:
+[07:04:12]   partial-.ds-logs-mytest-default-2026.05.27-000004
+[07:04:12]   .ds-logs-mytest-default-2026.05.27-000005
+[07:04:12] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:04:28] --- poll tick ---
+[07:04:28] Backing indices:
+[07:04:28]   partial-.ds-logs-mytest-default-2026.05.27-000004
+[07:04:28]   .ds-logs-mytest-default-2026.05.27-000005
+[07:04:28] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:04:43] --- poll tick ---
+[07:04:43] Backing indices:
+[07:04:43]   .ds-logs-mytest-default-2026.05.27-000005
+[07:04:43] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:04:59] --- poll tick ---
+[07:04:59] Backing indices:
+[07:04:59]   .ds-logs-mytest-default-2026.05.27-000005
+[07:04:59] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:05:14] --- poll tick ---
+[07:05:14] Backing indices:
+[07:05:14]   .ds-logs-mytest-default-2026.05.27-000005
+[07:05:14] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:05:36] --- poll tick ---
+[07:05:36] Backing indices:
+[07:05:36]   .ds-logs-mytest-default-2026.05.27-000005
+[07:05:36] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:05:51] --- poll tick ---
+[07:05:51] Backing indices:
+[07:05:51]   .ds-logs-mytest-default-2026.05.27-000005
+[07:05:51] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:06:07] --- poll tick ---
+[07:06:07] Backing indices:
+[07:06:07]   .ds-logs-mytest-default-2026.05.27-000005
+[07:06:07] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:06:22] --- poll tick ---
+[07:06:22] Backing indices:
+[07:06:22]   .ds-logs-mytest-default-2026.05.27-000005
+[07:06:22] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:06:38] --- poll tick ---
+[07:06:38] Backing indices:
+[07:06:38]   .ds-logs-mytest-default-2026.05.27-000005
+[07:06:38] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:06:53] --- poll tick ---
+[07:06:53] Backing indices:
+[07:06:53]   .ds-logs-mytest-default-2026.05.27-000005
+[07:06:53] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:07:09] --- poll tick ---
+[07:07:09] Backing indices:
+[07:07:09]   .ds-logs-mytest-default-2026.05.27-000005
+[07:07:09] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:07:24] --- poll tick ---
+[07:07:24] Backing indices:
+[07:07:24]   .ds-logs-mytest-default-2026.05.27-000005
+[07:07:24] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:07:39] --- poll tick ---
+[07:07:39] Backing indices:
+[07:07:39]   .ds-logs-mytest-default-2026.05.27-000005
+[07:07:39] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:07:55] --- poll tick ---
+[07:07:55] Backing indices:
+[07:07:55]   .ds-logs-mytest-default-2026.05.27-000005
+[07:07:55] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:08:14] --- poll tick ---
+[07:08:14] Backing indices:
+[07:08:14]   .ds-logs-mytest-default-2026.05.27-000005
+[07:08:14] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:08:30] --- poll tick ---
+[07:08:30] Backing indices:
+[07:08:30]   .ds-logs-mytest-default-2026.05.27-000005
+[07:08:30] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:08:45] --- poll tick ---
+[07:08:45] Backing indices:
+[07:08:45]   .ds-logs-mytest-default-2026.05.27-000005
+[07:08:45] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:09:01] --- poll tick ---
+[07:09:01] Backing indices:
+[07:09:01]   .ds-logs-mytest-default-2026.05.27-000005
+[07:09:01] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:09:16] --- poll tick ---
+[07:09:16] Backing indices:
+[07:09:16]   .ds-logs-mytest-default-2026.05.27-000005
+[07:09:16] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:09:32] --- poll tick ---
+[07:09:32] Backing indices:
+[07:09:32]   .ds-logs-mytest-default-2026.05.27-000005
+[07:09:32] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:09:47] --- poll tick ---
+[07:09:47] Backing indices:
+[07:09:47]   .ds-logs-mytest-default-2026.05.27-000005
+[07:09:47] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:10:02] --- poll tick ---
+[07:10:02] Backing indices:
+[07:10:02]   .ds-logs-mytest-default-2026.05.27-000005
+[07:10:02] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:10:18] --- poll tick ---
+[07:10:18] Backing indices:
+[07:10:18]   .ds-logs-mytest-default-2026.05.27-000005
+[07:10:18] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:10:33] --- poll tick ---
+[07:10:33] Backing indices:
+[07:10:33]   .ds-logs-mytest-default-2026.05.27-000005
+[07:10:33] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:10:49] --- poll tick ---
+[07:10:49] Backing indices:
+[07:10:49]   .ds-logs-mytest-default-2026.05.27-000005
+[07:10:49] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:11:05] --- poll tick ---
+[07:11:05] Backing indices:
+[07:11:05]   .ds-logs-mytest-default-2026.05.27-000005
+[07:11:05] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:11:20] --- poll tick ---
+[07:11:20] Backing indices:
+[07:11:20]   .ds-logs-mytest-default-2026.05.27-000005
+[07:11:20] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:11:35] --- poll tick ---
+[07:11:35] Backing indices:
+[07:11:35]   .ds-logs-mytest-default-2026.05.27-000005
+[07:11:35] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:11:51] --- poll tick ---
+[07:11:51] Backing indices:
+[07:11:51]   .ds-logs-mytest-default-2026.05.27-000005
+[07:11:51] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:12:09] --- poll tick ---
+[07:12:09] Backing indices:
+[07:12:09]   .ds-logs-mytest-default-2026.05.27-000005
+[07:12:09] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:12:25] --- poll tick ---
+[07:12:25] Backing indices:
+[07:12:25]   .ds-logs-mytest-default-2026.05.27-000005
+[07:12:25] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:12:40] --- poll tick ---
+[07:12:40] Backing indices:
+[07:12:40]   .ds-logs-mytest-default-2026.05.27-000005
+[07:12:40] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:12:56] --- poll tick ---
+[07:12:56] Backing indices:
+[07:12:56]   .ds-logs-mytest-default-2026.05.27-000005
+[07:12:56] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+[07:13:11] --- poll tick ---
+[07:13:11] Backing indices:
+[07:13:11]   .ds-logs-mytest-default-2026.05.27-000005
+[07:13:11] ILM snapshot count (date-based): 6
+(eval):[:38: integer expression expected: 0\n0
+
+── STEP 5: ILM Deletions COMPLETE at 2026-05-27T07:14:14Z ──
+Data stream now contains only the current write index (.ds-...-000005).
+ILM snapshots confirmed:
+  000001: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-ot__2vpdqdkx9q9t6plgoq
+  000002: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-nk2cm_iarwchvwxrsyx6_q
+
+── STEP 6: Restore Backing Index 000001 from ILM Snapshot ──
+Note: restore_index_v8.19.sh uses RESTORE_PREFIX=restored2-; scenario specifies restored-.
+Using scenario-specified prefix: restored-
+
+[Step 6a] Confirm snapshot contains raw .ds-... name (no fm-clone prefix in v8.19):
+{
+  "snapshot": "2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-ot__2vpdqdkx9q9t6plgoq",
+  "state": "SUCCESS",
+  "indices": [
+    ".ds-logs-mytest-default-2026.05.27-000001"
+  ]
+}
+
+[Step 6b] Restore .ds-logs-mytest-default-2026.05.27-000001 from ILM snapshot:
+{"accepted":true}
+[07:14:15] Waiting 10s for restore to complete...
+[07:14:25] Recovery status for restored-logs-mytest-default-2026.05.27-000001:
+index                                          stage files_recovered
+restored-logs-mytest-default-2026.05.27-000001 done  4
+
+── Restore Backing Index 000002 from ILM Snapshot ──
+[Step 6c] Confirm snapshot for 000002:
+{
+  "snapshot": "2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-nk2cm_iarwchvwxrsyx6_q",
+  "state": "SUCCESS",
+  "indices": [
+    ".ds-logs-mytest-default-2026.05.27-000002"
+  ]
+}
+
+[Step 6d] Restore .ds-logs-mytest-default-2026.05.27-000002 from ILM snapshot:
+{"accepted":true}
+[07:14:25] Waiting 10s for restore to complete...
+[07:14:35] Recovery status for restored-logs-mytest-default-2026.05.27-000002:
+index                                          stage files_recovered
+restored-logs-mytest-default-2026.05.27-000002 done  4
+
+── STEP 7: Unhide ILM-Restored Indices ──
+ℹ️  Restored indices inherit index.hidden=true — must set to false for wildcard searches.
+
+[Step 7a] Unhide restored-logs-mytest-default-2026.05.27-000001:
+{"acknowledged":true}
+[Step 7b] Unhide restored-logs-mytest-default-2026.05.27-000002:
+{"acknowledged":true}
+── Query ILM-Restored Indices ──
+[07:14:35] GET restored-logs-mytest-*/_search — both docs should appear:
+{
+  "hits_total": 2,
+  "docs": [
+    {
+      "index": "restored-logs-mytest-default-2026.05.27-000001",
+      "message": "Log event 1 in backing index 1"
+    },
+    {
+      "index": "restored-logs-mytest-default-2026.05.27-000002",
+      "message": "Log event 2 in backing index 2"
+    }
+  ]
+}
+
+── Steps 6 & 7 COMPLETE ──
+
+── STEP 7.5: Restore from SLM Snapshot (Expected: SUCCESS) ──
+At this point: 3 SLM snapshots still exist (max_count=3, none deleted yet).
+Oldest SLM snapshot (approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq) captured 000001 when it was still HOT.
+
+[Step 7.5a] List all SLM snapshots (should be exactly 3 approach-a-slm-*):
+[
+  {
+    "snapshot": "approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-ifavy3pbsxgujc4gt8vsva",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-5en9jldltxozc3fpwsvghw",
+    "state": "SUCCESS"
+  }
+]
+
+[Step 7.5b] Inspect oldest SLM snapshot — confirm it contains .ds-logs-mytest-default-2026.05.27-000001:
+{
+  "snapshot": "approach-a-slm-2026.05.27-v2tzb5r0qugsnm9cred6hq",
+  "state": "SUCCESS",
+  "indices_with_000001": [
+    ".internal.alerts-observability.logs.alerts-default-000001",
+    ".internal.alerts-dataset.quality.alerts-default-000001",
+    ".internal.alerts-default.alerts-default-000001",
+    ".internal.alerts-observability.threshold.alerts-default-000001",
+    ".internal.alerts-observability.apm.alerts-default-000001",
+    ".ds-ilm-history-7-2026.05.27-000001",
+    ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+    ".internal.alerts-streams.alerts-default-000001",
+    ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+    ".internal.alerts-transform.health.alerts-default-000001",
+    ".internal.alerts-security.attack.discovery.alerts-default-000001",
+    ".internal.alerts-observability.metrics.alerts-default-000001",
+    ".internal.alerts-observability.slo.alerts-default-000001",
+    ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+    ".ds-.kibana-event-log-ds-2026.05.27-000001",
+    ".internal.alerts-security.alerts-default-000001",
+    ".ds-logs-mytest-default-2026.05.27-000001",
+    ".internal.alerts-observability.uptime.alerts-default-000001",
+    ".ds-.slm-history-7-2026.05.27-000001",
+    ".internal.alerts-stack.alerts-default-000001",
+    "restored2-logs-mytest-v8-default-2026.05.27-000001"
+  ]
+}
+
+[Step 7.5c] Restore .ds-logs-mytest-default-2026.05.27-000001 from oldest SLM snapshot (prefix: restored-slm-):
+Response: {"accepted":true}
+
+[07:15:14] Waiting 10s for restore to complete...
+[07:15:24] Recovery status:
+index                                              stage files_recovered
+restored-slm-logs-mytest-default-2026.05.27-000001 done  4
+
+[Step 7.5d] Unhide SLM-restored index:
+{"acknowledged":true}
+[Step 7.5e] Query restored-slm-logs-mytest-* — should return 'Log event 1 in backing index 1':
+{
+  "hits_total": 1,
+  "docs": [
+    {
+      "index": "restored-slm-logs-mytest-default-2026.05.27-000001",
+      "message": "Log event 1 in backing index 1"
+    }
+  ]
+}
+
+✅ SUCCESS: SLM restore worked because the snapshot that captured 000001 still exists.
+
+────────────────────────────────────────────────────────────────
+── STEP 7.6: Demonstrate SLM Retention Breaking Recovery ──
+Running 3 more SLM executions (total will be 6). With max_count=3,
+SLM retention MUST delete the 3 oldest — including the one with 000001.
+────────────────────────────────────────────────────────────────
+
+[Step 7.6a] Run SLM execution #4...
+SLM #4: approach-a-slm-2026.05.27-cjdi8mahtokyzk56gewc0q
+[07:15:25] Waiting for snapshot 4 to complete...
+[07:15:30] SLM snapshot 4 state: SUCCESS (poll 1)
+
+[Step 7.6b] Run SLM execution #5...
+SLM #5: approach-a-slm-2026.05.27-zjbj1_lgtwafjips7ahlia
+[07:15:30] Waiting for snapshot 5 to complete...
+[07:15:35] SLM snapshot 5 state: SUCCESS (poll 1)
+
+[Step 7.6c] Run SLM execution #6...
+SLM #6: approach-a-slm-2026.05.27-tg4ufyjgsjszguwwmkta3g
+[07:15:35] Waiting for snapshot 6 to complete...
+[07:15:43] SLM snapshot 6 state: SUCCESS (poll 1)
+
+[Step 7.6d] Trigger SLM retention immediately:
+{"acknowledged":true}
+[07:15:43] Waiting 15s for retention to run...
+
+[Step 7.6e] Verify snapshot count — should be exactly 3 (newest only):
+[
+  {
+    "snapshot": "approach-a-slm-2026.05.27-tg4ufyjgsjszguwwmkta3g",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-zjbj1_lgtwafjips7ahlia",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-2026.05.27-cjdi8mahtokyzk56gewc0q",
+    "state": "SUCCESS"
+  }
+]
+
+[Step 7.6f] ⚠️  Attempt restore from NEWEST SLM snapshot (approach-a-slm-2026.05.27-tg4ufyjgsjszguwwmkta3g).
+            000001 was already deleted by ILM before snapshot 6 was taken.
+            Expected: ❌ index_not_found_exception
+{
+  "error": {
+    "root_cause": [
+      {
+        "type": "index_not_found_exception",
+        "reason": "no such index [.ds-logs-mytest-default-2026.05.27-000001]",
+        "index_uuid": "_na_",
+        "index": ".ds-logs-mytest-default-2026.05.27-000001"
+      }
+    ],
+    "type": "index_not_found_exception",
+    "reason": "no such index [.ds-logs-mytest-default-2026.05.27-000001]",
+    "index_uuid": "_na_",
+    "index": ".ds-logs-mytest-default-2026.05.27-000001"
+  },
+  "status": 404
+}
+
+❌ EXPECTED FAILURE confirmed above — SLM retention rotated out the snapshot
+   that contained 000001, leaving it unrecoverable via SLM.
+
+CONCLUSION: In a Frozen-tier ILM workflow, SLM snapshots are NOT a reliable
+recovery mechanism for deleted backing indices. ILM-managed searchable-snapshot
+retention with 'delete_searchable_snapshot: false' is the correct path.
+
+── Steps 7.5 & 7.6 COMPLETE ──
+Test run finished at 2026-05-27T07:15:59Z
+
+======================================================================
+── CLEANUP at 2026-05-27T07:18:42Z ──
+======================================================================
+
+── [9a] Reset ILM poll interval to null ──
+{"acknowledged":true,"persistent":{},"transient":{}}
+
+── [9b] Delete SLM policy (approach_a_slm_policy) ──
+{"acknowledged":true}
+
+── [9c] Delete remaining SLM snapshots (4, 5, 6) ──
+  Deleting SLM snapshot: approach-a-slm-2026.05.27-cjdi8mahtokyzk56gewc0q
+{"acknowledged":true}
+  Deleting SLM snapshot: approach-a-slm-2026.05.27-zjbj1_lgtwafjips7ahlia
+{"acknowledged":true}
+  Deleting SLM snapshot: approach-a-slm-2026.05.27-tg4ufyjgsjszguwwmkta3g
+{"acknowledged":true}
+
+── [Step 8] Delete ILM snapshots for this test run ──
+  Deleting ILM snapshot: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000001-approach_a_ds_policy-ot__2vpdqdkx9q9t6plgoq
+{"acknowledged":true}
+  Deleting ILM snapshot: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000002-approach_a_ds_policy-nk2cm_iarwchvwxrsyx6_q
+{"acknowledged":true}
+  Deleting ILM snapshot: 2026.05.27-.ds-logs-mytest-default-2026.05.27-000004-approach_a_ds_policy-vg7o6afqr7e0q-wt3ryacg
+{"acknowledged":true}
+
+── [9d] Delete data stream (logs-mytest-default) ──
+{"acknowledged":true}
+
+── [9e] Delete ILM-restored indices (restored-logs-mytest-*) ──
+{"acknowledged":true}
+── [9f] Delete SLM-restored indices (restored-slm-logs-mytest-*) ──
+{"acknowledged":true}
+
+── [9g] Delete ILM policy (approach_a_ds_policy) ──
+{"acknowledged":true}
+
+── [9h] Delete index template (approach_a_ds_template) ──
+{"acknowledged":true}
+
+── [Verify] Post-cleanup state ──
+Data stream (expect 404):
+"index_not_found_exception"
+ILM policy (expect 404):
+"resource_not_found_exception"
+SLM policy (expect 404):
+"resource_not_found_exception"
+Index template (expect 404):
+"resource_not_found_exception"
+Restored indices (expect empty):
+Remaining SLM snapshots (expect empty):
+[]
+Remaining ILM snapshots (date-based, current test only):
+[]
+
+── CLEANUP COMPLETE at 2026-05-27T07:18:50Z ──

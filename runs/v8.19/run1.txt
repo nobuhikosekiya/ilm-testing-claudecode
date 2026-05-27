@@ -1,0 +1,286 @@
+======================================================================
+v8.19 Test Scenario — 2026-05-27T04:03:34Z
+======================================================================
+
+── STEP 1: Set ILM poll interval to 10s ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+
+── STEP 2: Create ILM policy ──
+{"acknowledged":true}
+── STEP 3: Create index template ──
+{"acknowledged":true}
+── STEP 4: Ingest docs ──
+[4.1] Ingesting doc 1 (→ backing index 000001)...
+{"_index":".ds-logs-mytest-v8-default-2026.05.27-000001","_id":"M92aZ54BzM_9my6ClDc3","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}Waiting 20s for ILM rollover...
+[4.2] Ingesting doc 2 (→ backing index 000002)...
+{"_index":".ds-logs-mytest-v8-default-2026.05.27-000002","_id":"QN2aZ54BzM_9my6C4zeU","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}Waiting 20s for ILM rollover...
+[4.3] Ingesting doc 3 (→ backing index 000003)...
+{"_index":".ds-logs-mytest-v8-default-2026.05.27-000003","_id":"Tt2bZ54BzM_9my6CMjdW","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+── STEP 5: Current backing indices ──
+health status index                                        uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-v8-default-2026.05.27-000002 2viQkJ0VTxeYEpYN-XTyUA   1   1          1            0      4.4kb          4.4kb        4.4kb
+yellow open   .ds-logs-mytest-v8-default-2026.05.27-000003 of7zLLhsQa6u9G3IljLvcA   1   1          1            0      4.3kb          4.3kb        4.3kb
+yellow open   .ds-logs-mytest-v8-default-2026.05.27-000005 RsY-bDLrSsCsRsq3mAY4oA   1   1          0            0       227b           227b         227b
+
+ILM state of backing indices:
+Data stream status:
+{
+  "data_streams": [
+    {
+      "name": "logs-mytest-v8-default",
+      "timestamp_field": {
+        "name": "@timestamp"
+      },
+      "indices": [
+        {
+          "index_name": "partial-.ds-logs-mytest-v8-default-2026.05.27-000001",
+          "index_uuid": "XVeaXVpnTMWkmJReN4gWbw",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy_v8",
+          "index_mode": "standard"
+        },
+        {
+          "index_name": ".ds-logs-mytest-v8-default-2026.05.27-000002",
+          "index_uuid": "2viQkJ0VTxeYEpYN-XTyUA",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy_v8",
+          "index_mode": "standard"
+        },
+        {
+          "index_name": ".ds-logs-mytest-v8-default-2026.05.27-000003",
+          "index_uuid": "of7zLLhsQa6u9G3IljLvcA",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy_v8",
+          "index_mode": "standard"
+        },
+        {
+          "index_name": ".ds-logs-mytest-v8-default-2026.05.27-000005",
+          "index_uuid": "RsY-bDLrSsCsRsq3mAY4oA",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy_v8",
+          "index_mode": "standard"
+        }
+      ],
+      "generation": 5,
+      "status": "YELLOW",
+      "template": "approach_a_ds_template_v8",
+      "ilm_policy": "approach_a_ds_policy_v8",
+      "next_generation_managed_by": "Index Lifecycle Management",
+      "prefer_ilm": true,
+      "hidden": false,
+      "system": false,
+      "allow_custom_routing": false,
+      "replicated": false,
+      "rollover_on_write": false,
+      "index_mode": "standard",
+      "settings": {},
+      "failure_store": {
+        "enabled": false,
+        "rollover_on_write": true,
+        "indices": []
+      }
+    }
+  ]
+}
+
+ILM snapshots so far:
+All snapshots (last 10):
+{
+  "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000002-approach_a_ds_policy_v8-il0zifimqxa7te9y6bnqmq",
+  "state": "SUCCESS",
+  "indices": [
+    ".ds-logs-mytest-v8-default-2026.05.27-000002"
+  ],
+  "start_time": "2026-05-27T04:05:04.449Z"
+}
+{
+  "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000001-approach_a_ds_policy_v8-tix2zgoatjcdwk0bj7w22a",
+  "state": "SUCCESS",
+  "indices": [
+    ".ds-logs-mytest-v8-default-2026.05.27-000001"
+  ],
+  "start_time": "2026-05-27T04:04:44.235Z"
+}
+{
+  "snapshot": "cloud-snapshot-2026.05.27-ywht5zhpq1eamxxxyhdqwq",
+  "state": "SUCCESS",
+  "indices": [
+    ".internal.alerts-observability.slo.alerts-default-000001",
+    ".apm-custom-link",
+    ".kibana_task_manager_8.19.15_001",
+    ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+    ".kibana-siem-rule-migrations-prebuiltrules",
+    ".internal.alerts-observability.metrics.alerts-default-000001",
+    ".internal.alerts-observability.logs.alerts-default-000001",
+    ".secrets-inference",
+    ".kibana_security_session_1",
+    ".security-7",
+    ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+    ".internal.alerts-dataset.quality.alerts-default-000001",
+    ".slo-observability.summary-v3.5",
+    ".internal.alerts-observability.apm.alerts-default-000001",
+    ".kibana_analytics_8.19.15_001",
+    ".internal.alerts-security.alerts-default-000001",
+    ".internal.alerts-stack.alerts-default-000001",
+    ".internal.alerts-observability.uptime.alerts-default-000001",
+    ".ds-.kibana-event-log-ds-2026.05.27-000001",
+    ".kibana_8.19.15_001",
+    ".inference",
+    ".kibana_alerting_cases_8.19.15_001",
+    ".kibana_ingest_8.19.15_001",
+    ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+    ".apm-source-map",
+    ".internal.alerts-observability.threshold.alerts-default-000001",
+    ".kibana_security_solution_8.19.15_001",
+    ".internal.alerts-default.alerts-default-000001",
+    ".ds-ilm-history-7-2026.05.27-000001",
+    ".security-profile-8",
+    ".kibana-siem-rule-migrations-integrations",
+    ".kibana_locks-000001",
+    ".apm-agent-configuration",
+    ".internal.alerts-transform.health.alerts-default-000001",
+    ".slo-observability.sli-v3.5",
+    ".internal.alerts-security.attack.discovery.alerts-default-000001",
+    ".slo-observability.summary-v3.5.temp",
+    ".kibana_usage_counters_8.19.15_001",
+    ".internal.alerts-streams.alerts-default-000001",
+    ".security-tokens-7"
+  ],
+  "start_time": "2026-05-27T04:00:00.033Z"
+}
+
+── Monitoring ILM progress (waiting for 000001 & 000002 to be deleted) ──
+  [13:06:32] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [13:06:52] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [13:07:12] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [13:07:33] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [13:07:53] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [13:08:13] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  → Both 000001 and 000002 have been deleted by ILM ✓
+
+── STEP 6a: Confirm snapshot contents (no fm-clone in v8.19) ──
+[
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000003-approach_a_ds_policy_v8-txbwgkv-qsupvojwhssxoq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-v8-default-2026.05.27-000003"
+    ]
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000002-approach_a_ds_policy_v8-il0zifimqxa7te9y6bnqmq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-v8-default-2026.05.27-000002"
+    ]
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000001-approach_a_ds_policy_v8-tix2zgoatjcdwk0bj7w22a",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-v8-default-2026.05.27-000001"
+    ]
+  }
+]
+
+── STEP 6b: Restore backing index 000001 ──
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-v8-default-2026.05.27-000001
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-v8-default-2026.05.27-000001'...
+Found snapshot: 2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000001-approach_a_ds_policy_v8-tix2zgoatjcdwk0bj7w22a
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored-logs-mytest-v8-default-2026.05.27-000001
+Check recovery      : GET _cat/recovery/restored-logs-mytest-v8-default-2026.05.27-000001?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+── STEP 6c: Restore backing index 000002 ──
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-v8-default-2026.05.27-000002
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-v8-default-2026.05.27-000002'...
+Found snapshot: 2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000002-approach_a_ds_policy_v8-il0zifimqxa7te9y6bnqmq
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored-logs-mytest-v8-default-2026.05.27-000002
+Check recovery      : GET _cat/recovery/restored-logs-mytest-v8-default-2026.05.27-000002?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+── STEP 7: Query restored indices ──
+[7.1] Restored index listing:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   restored-logs-mytest-v8-default-2026.05.27-000001 ORKtr5GzRn-TanNSFzJeCA   1   1          1            0      4.4kb          4.4kb        4.4kb
+yellow open   restored-logs-mytest-v8-default-2026.05.27-000002 Ke02YFf5R9-5We7gsd4c6Q   1   1          1            0      4.4kb          4.4kb        4.4kb
+
+[7.2] Search across both restored indices:
+{
+  "total": {
+    "value": 2,
+    "relation": "eq"
+  },
+  "hits": [
+    {
+      "_index": "restored-logs-mytest-v8-default-2026.05.27-000001",
+      "message": "Log event 1 in backing index 1",
+      "timestamp": "2026-05-27T10:00:00Z"
+    },
+    {
+      "_index": "restored-logs-mytest-v8-default-2026.05.27-000002",
+      "message": "Log event 2 in backing index 2",
+      "timestamp": "2026-05-27T10:05:00Z"
+    }
+  ]
+}
+
+── STEP 8: Cleanup snapshots via cleanup_old_snapshots_v8.19.sh ──
+=== v8.19 Cleanup — ILM snapshots older than 5 minutes ===
+Searching for target snapshots...
+No snapshots older than 5 minutes found.
+(using 1-minute threshold for test)
+=== v8.19 Cleanup — ILM snapshots older than 1 minutes ===
+Searching for target snapshots...
+Deleting: 2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000001-approach_a_ds_policy_v8-tix2zgoatjcdwk0bj7w22a
+ -> Deleted successfully
+Deleting: 2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000002-approach_a_ds_policy_v8-il0zifimqxa7te9y6bnqmq
+ -> Deleted successfully
+Deleting: 2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000003-approach_a_ds_policy_v8-txbwgkv-qsupvojwhssxoq
+ -> Deleted successfully
+
+=== v8.19 Cleanup — done ===
+Deleted 3 snapshot(s).
+
+── STEP 9: Environment cleanup ──
+[9.1] Reset ILM poll interval:
+{"acknowledged":true,"persistent":{},"transient":{}}
+[9.2] Delete data stream:
+{"acknowledged":true}
+[9.3] Delete restored indices:
+{"acknowledged":true}
+[9.4] Delete ILM policy:
+{"acknowledged":true}
+[9.5] Delete index template:
+{"acknowledged":true}
+======================================================================
+v8.19 Test Scenario — COMPLETE — 2026-05-27T04:09:34Z
+======================================================================

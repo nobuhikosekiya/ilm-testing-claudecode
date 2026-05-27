@@ -1,0 +1,493 @@
+// =====================================================================
+// Approach A: Data Stream Test Procedure (For Kibana Dev Tools)
+// Target version: Elasticsearch / Elastic Cloud  v8.19
+// Variant: SLM + wait_for_snapshot TRAP in the Frozen Tier
+// =====================================================================
+//
+// PURPOSE OF THIS VARIANT
+// ========================
+// This scenario demonstrates that adding `wait_for_snapshot` to the ILM
+// delete phase — pointing at an SLM policy — does NOT provide reliable
+// protection for Frozen-tier backing indices. Two compounding failures occur:
+//
+// FAILURE 1 — PERMANENT ILM STALL
+//   `wait_for_snapshot` requires the named SLM policy to have completed a
+//   successful snapshot AFTER the backing index entered the delete phase.
+//   If SLM is on an infrequent or far-future schedule (as tested here),
+//   no new snapshot is ever taken automatically. The delete phase hangs
+//   indefinitely: the frozen index stays mounted, wasting cache and heap,
+//   and the data stream never cleans itself up.
+//
+// FAILURE 2 — FALSE SENSE OF SECURITY
+//   By the time the delete phase is reached, the backing index has long
+//   been a searchable-snapshot mount (partial-.ds-...). When a human
+//   eventually unblocks the stall by running SLM manually, that new
+//   snapshot captures only the frozen mount metadata — NOT the original
+//   hot-tier segment data. Meanwhile, the SLM snapshots that DID contain
+//   the full hot-tier data have already been rotated out by max_count: 3.
+//   Restoring from the "protecting" SLM snapshot either fails outright or
+//   returns an empty index.
+//
+// CONTRAST
+//   The ILM-managed snapshot (kept alive by delete_searchable_snapshot: false)
+//   still works perfectly and is the correct recovery path.
+//
+// RELATIONSHIP TO THE BASE SLM SCENARIO
+//   Read test_scenario_v8.19_slm.txt first for the core concepts.
+//   This file extends that scenario by wrapping the delete phase in a
+//   wait_for_snapshot that appears safe but is not.
+//
+// RESOURCE NAMES (distinct from the base scenario so both can run on the same cluster)
+//   ILM policy  : approach_a_wfs_policy
+//   SLM policy  : approach_a_wfs_slm_policy
+//   Index template: approach_a_wfs_template
+//   Data stream : logs-mytest-wfs-default   (pattern: logs-mytest-wfs-*)
+//   ILM-restore prefix : restored-wfs-
+//   SLM-restore prefix : restored-wfs-slm-
+//
+// ⚠️  v8.19 SNAPSHOT NAMING REMINDER (same as base scenario)
+// In v8.x, ILM force-merges the original backing index in-place before
+// snapshotting. The snapshot therefore contains the raw ".ds-..." name —
+// no "fm-clone-..." prefix. The restore rename_pattern is "\\.ds-(.+)".
+
+// ---------------------------------------------------------------------
+// Step 1: Preparation (Shorten ILM poll interval)
+// ---------------------------------------------------------------------
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": "10s"
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2: Create ILM policy WITH wait_for_snapshot in the delete phase
+// ---------------------------------------------------------------------
+// KEY DIFFERENCE from the base scenario:
+//   The delete phase now includes wait_for_snapshot pointing at the SLM
+//   policy. The intent looks safe: "don't delete until SLM has a copy."
+//   This scenario proves that intent is misleading in a frozen-tier workflow.
+//
+// delete_searchable_snapshot: false is kept intentionally — the failure
+// being shown is about SLM + wait_for_snapshot, not about ILM losing
+// its own snapshot.
+PUT _ilm/policy/approach_a_wfs_policy
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "actions": {
+          "rollover": { "max_docs": 1 }
+        }
+      },
+      "frozen": {
+        "min_age": "0m",
+        "actions": {
+          "searchable_snapshot": {
+            "snapshot_repository": "found-snapshots"
+          }
+        }
+      },
+      "delete": {
+        "min_age": "3m",
+        "actions": {
+          "wait_for_snapshot": {
+            "policy": "approach_a_wfs_slm_policy"
+          },
+          "delete": {
+            "delete_searchable_snapshot": false
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2.5: Create SLM policy
+// ---------------------------------------------------------------------
+// Identical structure to the base scenario's SLM policy — just renamed.
+// max_count: 3  →  after 6 executions, retention deletes the oldest 3.
+// schedule: far-future 2099 → the policy NEVER fires automatically.
+//   Every snapshot in this test is manually triggered via _execute.
+//   This simulates a real-world SLM policy that runs nightly or weekly —
+//   not continuously — so the "stall window" is measured in hours or days.
+// partial: true → allows the snapshot to include frozen/partial indices.
+PUT _slm/policy/approach_a_wfs_slm_policy
+{
+  "name": "<approach-a-wfs-slm-{now/d}>",
+  "schedule": "0 0 0 1 1 ? 2099",
+  "repository": "found-snapshots",
+  "config": {
+    "indices": "*",
+    "include_global_state": false,
+    "partial": true
+  },
+  "retention": {
+    "expire_after": "30d",
+    "min_count": 1,
+    "max_count": 3
+  }
+}
+
+// Verify the policy was created:
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// ---------------------------------------------------------------------
+// Step 3: Create Index Template for the wfs Data Stream
+// ---------------------------------------------------------------------
+// Priority 200 to outrank the built-in "logs" template (priority 100).
+// Pattern scoped to "logs-mytest-wfs-*" to avoid touching other streams.
+PUT _index_template/approach_a_wfs_template
+{
+  "index_patterns": ["logs-mytest-wfs-*"],
+  "priority": 200,
+  "data_stream": { },
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "approach_a_wfs_policy"
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 4: Ingest Docs 1–3 and Take SLM Snapshots 1–3 (Hot Phase)
+// ---------------------------------------------------------------------
+// Same ingest-then-snapshot discipline as the base scenario.
+// These three snapshots capture the hot-tier copy of each backing index,
+// including .ds-logs-mytest-wfs-default-2026.05.27-000001 at full fidelity.
+// ⚠️  They will later be DELETED by SLM retention in Step 4.5.
+
+// --- 4.1 Doc 1 → SLM snapshot 1 ---
+POST logs-mytest-wfs-default/_doc
+{
+  "@timestamp": "2026-05-27T10:00:00Z",
+  "message": "Log event 1 in backing index 1 (wfs scenario)"
+}
+
+// Execute SLM snapshot #1 BEFORE ILM rolls over:
+POST _slm/policy/approach_a_wfs_slm_policy/_execute
+
+// Confirm snapshot 1 completed (look for last_success.snapshot_name):
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// WAIT ~15 SECONDS for ILM to evaluate max_docs: 1 and roll over.
+
+// --- 4.2 Doc 2 → SLM snapshot 2 ---
+POST logs-mytest-wfs-default/_doc
+{
+  "@timestamp": "2026-05-27T10:05:00Z",
+  "message": "Log event 2 in backing index 2 (wfs scenario)"
+}
+
+POST _slm/policy/approach_a_wfs_slm_policy/_execute
+
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// WAIT ~15 SECONDS for the next ILM rollover.
+
+// --- 4.3 Doc 3 → SLM snapshot 3 ---
+POST logs-mytest-wfs-default/_doc
+{
+  "@timestamp": "2026-05-27T10:10:00Z",
+  "message": "Log event 3 in backing index 3 (wfs scenario)"
+}
+
+POST _slm/policy/approach_a_wfs_slm_policy/_execute
+
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// Verify all 3 SLM snapshots exist and names follow approach-a-wfs-slm-<date>-<uuid>:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
+
+// ---------------------------------------------------------------------
+// Step 4.5 (NEW): SLM Snapshots 4–6 → Force Retention → Rotation
+// ---------------------------------------------------------------------
+// Now take 3 more SLM snapshots while the backing indices transition to frozen.
+// Purpose: push the total past max_count (3) so that retention deletes
+// snapshots 1, 2, and 3 — the ONLY ones that contained the hot-tier copy
+// of index 000001 with its full segment data.
+//
+// Wait ~30 seconds between each execution so each snapshot gets a distinct
+// timestamp name. During this window ILM is busy force-merging and mounting
+// the frozen searchable snapshots.
+
+// --- Snapshot 4 ---
+POST _slm/policy/approach_a_wfs_slm_policy/_execute
+
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// WAIT ~30 SECONDS
+
+// --- Snapshot 5 ---
+POST _slm/policy/approach_a_wfs_slm_policy/_execute
+
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// WAIT ~30 SECONDS
+
+// --- Snapshot 6 ---
+POST _slm/policy/approach_a_wfs_slm_policy/_execute
+
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// Force SLM retention to run immediately (it does not run synchronously
+// after _execute, so we trigger it explicitly):
+POST _slm/_execute_retention
+
+// Wait ~10 seconds, then verify the snapshot list.
+// ✅ EXPECTED: Only 3 snapshots remain — the 3 NEWEST (4, 5, 6).
+//    Snapshots 1, 2, 3 are GONE. Those were the only snapshots with the
+//    original hot-tier segment data for .ds-logs-mytest-wfs-default-2026.05.27-000001.
+// ⚠️  The 3 remaining snapshots captured index 000001 only as a frozen
+//    partial mount (partial-.ds-...), not as an active hot-tier index.
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// CHECKPOINT: What the remaining SLM snapshots contain for index 000001:
+//   Snapshots 4/5/6 → .ds-logs-mytest-wfs-default-2026.05.27-000001
+//                      listed as PARTIAL (because ILM had already frozen it)
+//                      NOT the original segments — only the mount metadata.
+// To inspect a specific snapshot (replace <snapshot_name> with actual name):
+// GET _snapshot/found-snapshots/<snapshot_name>
+
+// Check the current data stream — confirm frozen partial mounts are visible:
+GET _cat/indices/.ds-logs-mytest-wfs-*?v
+
+// ---------------------------------------------------------------------
+// Step 5: Wait for Delete Phase — Monitor with Timestamps
+// ---------------------------------------------------------------------
+// Wait for ILM to move .ds-logs-mytest-wfs-default-2026.05.27-000001
+// through frozen (min_age: 0m) and into delete (min_age: 3m after frozen).
+//
+// Run this block on a regular cadence, noting the [HH:MM:SS] timestamp
+// on each poll so the timeline is clear in the output file.
+// When phase == "delete" and action == "wait_for_snapshot", proceed to Step 6.
+GET _cat/indices/.ds-logs-mytest-wfs-*?v
+GET /_ilm/explain/.ds-logs-mytest-wfs-default-2026.05.27-000001
+
+// Also count SLM vs ILM snapshots on every tick to confirm no new SLM
+// snapshot has been taken automatically (schedule is 2099 → it won't):
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// ---------------------------------------------------------------------
+// Step 6 (NEW): Observe wait_for_snapshot — The Permanent Stall
+// ---------------------------------------------------------------------
+// At this point _ilm/explain should show:
+//   "phase": "delete"
+//   "action": "wait_for_snapshot"
+//   "step": "wait-for-snapshot"
+//   "step_info": {
+//     "message": "Waiting for next snapshot from policy [approach_a_wfs_slm_policy]",
+//     "policy_last_success": "<timestamp of snapshot 6>",
+//     "phase_time": "<timestamp AFTER snapshot 6>"
+//   }
+//
+// WHY IT IS STUCK:
+//   ILM records the moment the index entered the delete phase ("phase_time").
+//   It then checks whether the SLM policy has a "last_success" timestamp
+//   that is MORE RECENT than "phase_time".
+//   Snapshot 6 was taken BEFORE the delete phase was entered →
+//     policy_last_success < phase_time → condition NOT met.
+//   The next SLM execution would be in year 2099. This wait is permanent.
+//
+// Run the explain call multiple times and record the [HH:MM:SS] timestamp
+// alongside each. The step_info should not change at all — proving the stall.
+GET /_ilm/explain/.ds-logs-mytest-wfs-default-2026.05.27-000001
+
+// (repeat several times over a few minutes to confirm no progression)
+
+// ❌ EXPECTED STATE: The backing index continues to appear in _cat/indices
+//    as a frozen partial mount even though its delete min_age has expired.
+//    The data stream is stuck. No automatic cleanup will ever occur.
+GET _cat/indices/.ds-logs-mytest-wfs-*?v
+
+// ---------------------------------------------------------------------
+// Step 7 (NEW): False Unblock — Manual SLM Execution
+// ---------------------------------------------------------------------
+// An operator who notices the stall might manually trigger SLM to unblock it.
+// This DOES satisfy wait_for_snapshot — ILM will proceed and delete the mount.
+// But examine what snapshot 7 actually contains for index 000001.
+
+// Execute SLM snapshot 7:
+POST _slm/policy/approach_a_wfs_slm_policy/_execute
+
+// Confirm snapshot 7 completed and note its name:
+GET _slm/policy/approach_a_wfs_slm_policy?human
+
+// Wait ~15 seconds, then check ILM explain again.
+// ✅ wait_for_snapshot is now satisfied — policy_last_success > phase_time.
+// ILM advances to the "delete" step and removes the frozen mount.
+GET /_ilm/explain/.ds-logs-mytest-wfs-default-2026.05.27-000001
+
+// Wait for the backing index to disappear from _cat:
+GET _cat/indices/.ds-logs-mytest-wfs-*?v
+
+// --- 7.1 Inspect snapshot 7: what did SLM "back up"? ---
+// Replace <snapshot_7> with the actual name from the _execute response above.
+// Look at the "indices" array for .ds-logs-mytest-wfs-default-2026.05.27-000001.
+// In v8.19, a partial mount of a frozen index may appear under the bare
+// ".ds-..." name or not appear at all if SLM excluded it.
+// Record exactly what you see in the output file.
+GET _snapshot/found-snapshots/<snapshot_7>
+
+// --- 7.2 Attempt to restore from snapshot 7 — demonstrate the mirage ---
+// Try to restore index 000001 from the "protecting" snapshot 7.
+// If 000001 IS listed in snapshot 7's indices:
+POST _snapshot/found-snapshots/<snapshot_7>/_restore
+{
+  "indices": ".ds-logs-mytest-wfs-default-2026.05.27-000001",
+  "rename_pattern": "\\.ds-(.+)",
+  "rename_replacement": "restored-wfs-slm-late-$1",
+  "index_settings": {
+    "index.lifecycle.name": null,
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}
+
+// ❌ EXPECTED OUTCOME (one of two failure modes):
+//   A) index_not_found_exception: 000001 was never captured as real data in
+//      snapshot 7 — SLM skipped the frozen mount entirely, or captured only
+//      metadata pointing at the ILM searchable snapshot, which is a different
+//      snapshot entry in the repository. The restore has nothing to work with.
+//
+//   B) Restore succeeds but the index is EMPTY — 0 documents, 0 bytes of
+//      primary data. The SLM snapshot captured the partial-mount reference,
+//      not the segment files. A count confirms:
+//      GET restored-wfs-slm-late-logs-mytest-wfs-default-2026.05.27-000001/_count
+//      → { "count": 0 }
+//
+// Either outcome proves that snapshot 7 provides NO actual data protection
+// for index 000001. The `wait_for_snapshot` safety mechanism was an illusion.
+
+// Unhide if restored (needed to confirm emptiness in case B):
+PUT restored-wfs-slm-late-logs-mytest-wfs-default-2026.05.27-000001/_settings
+{ "index": { "hidden": false } }
+
+GET restored-wfs-slm-late-logs-mytest-wfs-default-2026.05.27-000001/_count
+GET restored-wfs-slm-late-logs-mytest-wfs-default-2026.05.27-000001/_search
+
+// ---------------------------------------------------------------------
+// Step 8: ILM-Restore Still Works — the Correct Recovery Path
+// ---------------------------------------------------------------------
+// The ILM-managed snapshot for index 000001 was kept intact because
+// delete_searchable_snapshot: false.  That snapshot contains the real
+// hot-tier segment data and can be restored normally.
+//
+// [BASH SCRIPT USAGE]: Run restore_index_v8.19.sh with TARGET_INDEX set to
+//   .ds-logs-mytest-wfs-default-2026.05.27-000001
+// and RESTORE_PREFIX overridden to "restored-wfs-" to match this scenario's
+// naming convention. No script changes are required — just:
+//   RESTORE_PREFIX=restored-wfs- ./restore_index_v8.19.sh \
+//     .ds-logs-mytest-wfs-default-2026.05.27-000001
+//
+// ℹ️  v8.19 ILM snapshot naming (same as base scenario):
+//   <YYYY.MM.DD>-<backing-index-name>-approach_a_wfs_policy-<uuid>
+// The rename_pattern below strips the ".ds-" prefix as in the base scenario.
+
+// 1. List all snapshots and identify the ILM snapshot for 000001:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
+
+// 2. Inspect the ILM snapshot to confirm it contains the raw ".ds-..." name:
+// GET _snapshot/found-snapshots/<ilm_snapshot_name_for_000001>
+// → "indices": [".ds-logs-mytest-wfs-default-2026.05.27-000001"]
+//   (no fm-clone prefix in v8.19)
+
+// 3. Restore from the ILM snapshot:
+POST _snapshot/found-snapshots/<ilm_snapshot_name_for_000001>/_restore
+{
+  "indices": ".ds-logs-mytest-wfs-default-2026.05.27-000001",
+  "rename_pattern": "\\.ds-(.+)",
+  "rename_replacement": "restored-wfs-$1",
+  "index_settings": {
+    "index.lifecycle.name": null,
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}
+
+// Unhide the restored index (v8.19: inherits index.hidden = true):
+PUT restored-wfs-logs-mytest-wfs-default-2026.05.27-000001/_settings
+{ "index": { "hidden": false } }
+
+// ✅ EXPECTED: Returns "Log event 1 in backing index 1 (wfs scenario)"
+GET restored-wfs-logs-mytest-wfs-default-2026.05.27-000001/_search
+
+// =====================================================================
+// CONCLUSION
+// =====================================================================
+//
+// FAILURE 1 — PERMANENT ILM STALL (shown in Step 6):
+//   wait_for_snapshot in the ILM delete phase requires the SLM policy to
+//   execute a new snapshot AFTER the index enters the delete phase.
+//   In any real deployment where SLM runs on an hourly/nightly/weekly
+//   schedule (modelled here as year 2099), the delete phase stalls for the
+//   entire gap between SLM executions — potentially indefinitely if no one
+//   notices. The frozen mount stays alive, consuming cache and heap.
+//
+// FAILURE 2 — FALSE SENSE OF SECURITY (shown in Step 7):
+//   When a human finally unblocks the stall by running SLM manually,
+//   snapshot 7 captures only the frozen (partial) mount metadata, NOT the
+//   original hot-tier segment data. Those segments were in SLM snapshots
+//   1/2/3, which were deleted by retention at max_count: 3 back in Step 4.5.
+//   The "protected" SLM snapshot returns nothing useful on restore.
+//
+// CORRECT PATH (shown in Step 8):
+//   delete_searchable_snapshot: false keeps the ILM-managed searchable
+//   snapshot alive. That snapshot holds the real segment data and supports
+//   a clean restore. This — not wait_for_snapshot pointing at SLM — is the
+//   reliable recovery mechanism for Frozen-tier backing indices.
+//
+// DO NOT use wait_for_snapshot in the delete phase of a frozen-tier ILM
+// policy unless you fully understand:
+//   (a) SLM's execution frequency relative to ILM's delete min_age, AND
+//   (b) that SLM snapshots of frozen indices capture mount metadata, not data.
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// Step 9: Environment Cleanup
+// ---------------------------------------------------------------------
+// ⚠️  IMPORTANT: If the test was stopped before Step 7 (i.e., wait_for_snapshot
+//    is still STUCK), the data stream's backing index will resist deletion.
+//    Before running the cleanup below, unblock ILM using ONE of:
+//
+//    Option A — Run SLM once to satisfy wait_for_snapshot, then wait for
+//               ILM to complete the delete step:
+//      POST _slm/policy/approach_a_wfs_slm_policy/_execute
+//      (wait ~20 seconds, re-check _cat/indices until 000001 is gone)
+//
+//    Option B — Remove wait_for_snapshot from the policy, then retry ILM:
+//      PUT _ilm/policy/approach_a_wfs_policy  (remove wait_for_snapshot block)
+//      POST .ds-logs-mytest-wfs-default-2026.05.27-000001/_ilm/retry
+//
+// Reset ILM poll interval:
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": null
+  }
+}
+
+// Delete the SLM policy:
+DELETE _slm/policy/approach_a_wfs_slm_policy
+
+// Delete any remaining SLM snapshots from this test (snapshots 4–7 if still present).
+// Use the actual names from the output file:
+// DELETE _snapshot/found-snapshots/<approach_a_wfs_slm_snapshot_4>
+// DELETE _snapshot/found-snapshots/<approach_a_wfs_slm_snapshot_5>
+// DELETE _snapshot/found-snapshots/<approach_a_wfs_slm_snapshot_6>
+// DELETE _snapshot/found-snapshots/<approach_a_wfs_slm_snapshot_7>
+
+// [BASH SCRIPT]: Delete ILM snapshots for this test (all named <date>-... matching
+// approach_a_wfs_policy). The versioned script handles them correctly:
+//   source .env_v8.19 && ./cleanup_old_snapshots_v8.19.sh
+// Pass a minutes_old value of 0 to catch all snapshots regardless of age.
+
+// Delete the data stream and all its backing indices:
+DELETE _data_stream/logs-mytest-wfs-default
+
+// Delete the index template and ILM policy:
+DELETE _index_template/approach_a_wfs_template
+DELETE _ilm/policy/approach_a_wfs_policy
+
+// Delete all restored indices from this test:
+DELETE restored-wfs-*
+DELETE restored-wfs-slm-*

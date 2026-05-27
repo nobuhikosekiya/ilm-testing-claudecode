@@ -1,0 +1,242 @@
+// =====================================================================
+// Approach A: Data Stream Test Procedure (For Kibana Dev Tools)
+// Target version: Elasticsearch / Elastic Cloud  v9.4
+// =====================================================================
+//
+// PURPOSE
+// -------
+// This scenario answers two practical operations questions that arise when
+// running a Frozen-tier ILM policy with snapshot retention:
+//
+//   1. RESTORE: "A backing index was deleted by ILM. How do I get the data
+//      back from its ILM snapshot?"
+//
+//      The ILM delete phase is configured with:
+//        "delete_searchable_snapshot": false
+//      This preserves the ILM-created snapshot even after ILM removes the
+//      Frozen-tier mount and the underlying backing index.  The scenario
+//      walks through locating that snapshot in `found-snapshots` and
+//      restoring the specific backing index(es) of a log data stream as
+//      plain, searchable hot-tier indices.
+//
+//   2. CLEANUP: "Those preserved ILM snapshots will accumulate. How do I
+//      delete them after a retention period (e.g. 2 years)?"
+//
+//      The scenario demonstrates manual Dev Tools deletion and points to
+//      the companion `cleanup_old_snapshots_v9.4.sh` script, which
+//      automates age-based snapshot deletion.
+//
+// In short: this is the end-to-end reference for "post-Frozen-delete
+// restore from ILM snapshot" on v9.4 data streams.
+//
+// ⚠️  v9.2+ vs v8.x DIFFERENCE — fm-clone step
+// In v9.2+, ILM creates a temporary "fm-clone-<uuid>-" copy of the
+// backing index, force-merges THAT clone, and then snapshots the clone.
+// The snapshot therefore contains the fm-clone name, NOT the bare
+// ".ds-..." name. The restore steps below account for this with a
+// rename_pattern that strips the fm-clone prefix.
+
+// ---------------------------------------------------------------------
+// Step 1: Preparation (Shorten ILM poll interval)
+// ---------------------------------------------------------------------
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": "10s"
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2: Create ILM policy
+// ---------------------------------------------------------------------
+// Policy triggers rollover at 1 document, moves to Frozen, 
+// and deletes the backing index after 3 minutes while keeping the snapshot.
+PUT _ilm/policy/approach_a_ds_policy
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "actions": {
+          "rollover": { "max_docs": 1 }
+        }
+      },
+      "frozen": {
+        "min_age": "0m",
+        "actions": {
+          "searchable_snapshot": {
+            "snapshot_repository": "found-snapshots"
+          }
+        }
+      },
+      "delete": {
+        "min_age": "3m",
+        "actions": {
+          "delete": {
+            "delete_searchable_snapshot": false
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 3: Create Index Template for Data Streams
+// ---------------------------------------------------------------------
+// Notice the "data_stream": { } block. This tells Elasticsearch to
+// treat any index matching "logs-mytest-*" as a Data Stream.
+// IMPORTANT: "priority": 200 is required to outrank the built-in "logs"
+// template (priority: 100, pattern: logs-*-*) which would otherwise
+// capture this data stream and apply the wrong ILM policy.
+PUT _index_template/approach_a_ds_template
+{
+  "index_patterns": ["logs-mytest-*"],
+  "priority": 200,
+  "data_stream": { },
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "approach_a_ds_policy"
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 4: Ingestion & ILM Rollovers (Creating backing indices)
+// ---------------------------------------------------------------------
+// With Data Streams, you do not create the index manually. You simply 
+// POST data to the stream name, and it creates the first backing index.
+
+// 4.1 Ingest Doc 1 (Goes into backing index 000001)
+POST logs-mytest-default/_doc
+{
+  "@timestamp": "2026-05-27T10:00:00Z",
+  "message": "Log event 1 in backing index 1"
+}
+
+// WAIT ~15 SECONDS for ILM to evaluate the max_docs: 1 condition 
+// and automatically roll over to a new backing index.
+
+// 4.2 Ingest Doc 2 (Goes into backing index 000002)
+POST logs-mytest-default/_doc
+{
+  "@timestamp": "2026-05-27T10:05:00Z",
+  "message": "Log event 2 in backing index 2"
+}
+
+// WAIT ~15 SECONDS for the next ILM rollover.
+
+// 4.3 Ingest Doc 3 (Goes into backing index 000003)
+POST logs-mytest-default/_doc
+{
+  "@timestamp": "2026-05-27T10:10:00Z",
+  "message": "Log event 3 in backing index 3"
+}
+
+// ---------------------------------------------------------------------
+// Step 5: Identify Backing Indices & Wait for Deletion
+// ---------------------------------------------------------------------
+// Check the actual names of the hidden backing indices. 
+// They will look like: .ds-logs-mytest-default-2026.05.27-000001
+GET _cat/indices/.ds-logs-mytest-*?v
+
+// Wait a few minutes. Check the data stream status until you see the 
+// older backing indices drop off (deleted by ILM) and return 404.
+GET .ds-logs-mytest-default-2026.05.27-000001
+
+// ---------------------------------------------------------------------
+// Step 6: 👉 BASH SCRIPT INTEGRATION (Restore Phase)
+// ---------------------------------------------------------------------
+// AT THIS POINT IN REAL LIFE: You know you need data from backing index 1
+// and backing index 2. Since they are deleted, you must restore them one by one.
+
+// [BASH SCRIPT USAGE]: Run `restore_index.sh` targeting the exact
+// backing index name (e.g., TARGET_INDEX=".ds-logs-mytest-default-2026.05.27-000001").
+
+// ⚠️  IMPORTANT — ILM Frozen Snapshot Index Naming:
+// When ILM's frozen phase takes a searchable snapshot of a backing index,
+// it first force-merges the index into a clone named with a "fm-clone-<uuid>-"
+// prefix, then snapshots THAT clone. The snapshot therefore contains:
+//   fm-clone-<uuid>-.ds-logs-mytest-default-2026.05.27-000001
+// NOT the bare ".ds-..." name you might expect.
+//
+// To find the exact index name inside a given ILM snapshot, run:
+//   GET _snapshot/found-snapshots/<ilm_snapshot_name>
+// and look at the "indices" array — the entry with "fm-clone-" prefix is the one.
+//
+// The rename_pattern below uses ".*\\.ds-(.+)" to strip any leading prefix
+// (including "fm-clone-<uuid>-") and restore as a clean "restored-..." index.
+
+// [MANUAL DEV TOOLS EQUIVALENT - RESTORING INDEX 1]:
+// 1. Find ILM snapshots (named: <date>-<backing-index-name>-<policy>-<uuid>):
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// 2. Inspect the snapshot to get the exact fm-clone index name:
+// GET _snapshot/found-snapshots/<snapshot_name_for_000001>
+// Look for "indices": ["fm-clone-<uuid>-.ds-logs-mytest-default-2026.05.27-000001"]
+
+// 3. Execute the restore for Backing Index 1.
+// Replace <fm-clone-index-for-000001> with the actual "fm-clone-..." name found above.
+// The rename_pattern strips everything up to and including ".ds-" so the result is:
+//   restored-logs-mytest-default-2026.05.27-000001
+POST _snapshot/found-snapshots/<snapshot_name_for_000001>/_restore
+{
+  "indices": "<fm-clone-index-for-000001>",
+  "rename_pattern": ".*\\.ds-(.+)",
+  "rename_replacement": "restored-$1",
+  "index_settings": {
+    "index.lifecycle.name": null,
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}
+
+// [MANUAL DEV TOOLS EQUIVALENT - RESTORING INDEX 2]:
+// Same approach — inspect the snapshot, get the fm-clone index name, then restore.
+POST _snapshot/found-snapshots/<snapshot_name_for_000002>/_restore
+{
+  "indices": "<fm-clone-index-for-000002>",
+  "rename_pattern": ".*\\.ds-(.+)",
+  "rename_replacement": "restored-$1",
+  "index_settings": {
+    "index.lifecycle.name": null,
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 7: Querying the Restored Indices
+// ---------------------------------------------------------------------
+// ⚠️  IMPORTANT — Restored indices inherit index.hidden = true from the
+// fm-clone source. You must set it to false before wildcard searches work.
+PUT restored-logs-mytest-default-2026.05.27-000001/_settings
+{ "index": { "hidden": false } }
+
+PUT restored-logs-mytest-default-2026.05.27-000002/_settings
+{ "index": { "hidden": false } }
+
+// You can now query these restored indices individually, or query them
+// together using a wildcard just like you would with normal indices.
+GET restored-logs-mytest-*/_search
+
+// ---------------------------------------------------------------------
+// Step 8: 👉 BASH SCRIPT INTEGRATION (Cleanup Phase)
+// ---------------------------------------------------------------------
+// [BASH SCRIPT USAGE]: Same as before, schedule `cleanup_old_snapshots.sh` 
+// to delete ILM snapshots older than 2 years.
+
+// [MANUAL DEV TOOLS EQUIVALENT]:
+DELETE _snapshot/found-snapshots/<snapshot_name_for_000001>
+DELETE _snapshot/found-snapshots/<snapshot_name_for_000002>
+
+// ---------------------------------------------------------------------
+// Step 9: Environment Cleanup
+// ---------------------------------------------------------------------
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": null
+  }
+}
+
+// Delete the data stream, its remaining active backing indices, and restored data
+DELETE _data_stream/logs-mytest-default
+DELETE restored-logs-mytest-*

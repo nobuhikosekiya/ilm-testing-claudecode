@@ -1,0 +1,141 @@
+======================================================================
+v8.19 Test Scenario Run 2 — 2026-05-27T05:16:25Z
+======================================================================
+
+── STEP 1: Set ILM poll interval to 10s ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+── STEP 2: Create ILM policy ──
+{"acknowledged":true}
+── STEP 3: Create index template ──
+{"acknowledged":true}
+── STEP 4: Ingest docs ──
+[4.1] Ingesting doc 1 (→ backing index 000001)...
+{"_index":".ds-logs-mytest-v8-default-2026.05.27-000001","_id":"kd3dZ54BzM_9my6CHzcy","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}Waiting 20s for ILM rollover...
+[4.2] Ingesting doc 2 (→ backing index 000002)...
+{"_index":".ds-logs-mytest-v8-default-2026.05.27-000002","_id":"nt3dZ54BzM_9my6CbjcD","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}Waiting 20s for ILM rollover...
+[4.3] Ingesting doc 3 (→ backing index 000003)...
+{"_index":".ds-logs-mytest-v8-default-2026.05.27-000003","_id":"rN3dZ54BzM_9my6CvDe8","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+── STEP 5: Backing indices & ILM snapshots ──
+[5.1] Current backing indices:
+health status index                                        uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-v8-default-2026.05.27-000002 C7P1Ok3RRG-hJGFJ9pRaIg   1   1          1            0      4.4kb          4.4kb        4.4kb
+yellow open   .ds-logs-mytest-v8-default-2026.05.27-000003 h_6uUpK6TTWVNrsO333fFw   1   1          1            0      4.3kb          4.3kb        4.3kb
+yellow open   .ds-logs-mytest-v8-default-2026.05.27-000005 -YB_ADFhSm-Nf7jBX-56oQ   1   1          0            0       227b           227b         227b
+
+[5.2] Data stream status:
+[
+  "partial-.ds-logs-mytest-v8-default-2026.05.27-000001",
+  ".ds-logs-mytest-v8-default-2026.05.27-000002",
+  ".ds-logs-mytest-v8-default-2026.05.27-000003",
+  ".ds-logs-mytest-v8-default-2026.05.27-000005"
+]
+
+── Monitoring: waiting for 000001 & 000002 to be deleted by ILM ──
+  [14:17:57] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, .ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 2
+  [14:18:18] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [14:18:38] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [14:18:58] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [14:19:22] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [14:19:42] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [14:20:02] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000001, partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [14:20:23] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000002, partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  [14:20:43] backing: partial-.ds-logs-mytest-v8-default-2026.05.27-000003, .ds-logs-mytest-v8-default-2026.05.27-000005 | ILM snaps: 3
+  → Both 000001 and 000002 deleted by ILM ✓
+
+── STEP 6a: Confirm snapshot contents ──
+[
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000003-approach_a_ds_policy_v8-x8usbtrwtzulxf8qnn_ing",
+    "state": "SUCCESS",
+    "start_time": "2026-05-27T05:18:06.128Z",
+    "indices": [
+      ".ds-logs-mytest-v8-default-2026.05.27-000003"
+    ]
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000002-approach_a_ds_policy_v8-cs6og5axtxwi_e9mrlvj-w",
+    "state": "SUCCESS",
+    "start_time": "2026-05-27T05:17:46.114Z",
+    "indices": [
+      ".ds-logs-mytest-v8-default-2026.05.27-000002"
+    ]
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000001-approach_a_ds_policy_v8-nnn4pzjbrju2sfk7bvloog",
+    "state": "SUCCESS",
+    "start_time": "2026-05-27T05:17:26.101Z",
+    "indices": [
+      ".ds-logs-mytest-v8-default-2026.05.27-000001"
+    ]
+  }
+]
+
+── STEP 6b: Restore backing index 000001 ──
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-v8-default-2026.05.27-000001
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-v8-default-2026.05.27-000001'...
+Found snapshot: 2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000001-approach_a_ds_policy_v8-nnn4pzjbrju2sfk7bvloog
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored-logs-mytest-v8-default-2026.05.27-000001
+Check recovery      : GET _cat/recovery/restored-logs-mytest-v8-default-2026.05.27-000001?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+── STEP 6c: Restore backing index 000002 ──
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-v8-default-2026.05.27-000002
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-v8-default-2026.05.27-000002'...
+Found snapshot: 2026.05.27-.ds-logs-mytest-v8-default-2026.05.27-000002-approach_a_ds_policy_v8-cs6og5axtxwi_e9mrlvj-w
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored-logs-mytest-v8-default-2026.05.27-000002
+Check recovery      : GET _cat/recovery/restored-logs-mytest-v8-default-2026.05.27-000002?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+── STEP 7: Query restored indices ──
+[7.1] Restored index listing:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   restored-logs-mytest-v8-default-2026.05.27-000001 dybYLB_4SAuTWSYjJr0EGQ   1   1          1            0      4.4kb          4.4kb        4.4kb
+yellow open   restored-logs-mytest-v8-default-2026.05.27-000002 FBVYaaILSlqh_u-inSU9FA   1   1          1            0      4.4kb          4.4kb        4.4kb
+
+[7.2] Search across both restored indices:
+{
+  "total": {
+    "value": 2,
+    "relation": "eq"
+  },
+  "hits": [
+    {
+      "_index": "restored-logs-mytest-v8-default-2026.05.27-000001",
+      "message": "Log event 1 in backing index 1",
+      "timestamp": "2026-05-27T10:00:00Z"
+    },
+    {
+      "_index": "restored-logs-mytest-v8-default-2026.05.27-000002",
+      "message": "Log event 2 in backing index 2",
+      "timestamp": "2026-05-27T10:05:00Z"
+    }
+  ]
+}
+
+======================================================================
+v8.19 Test Scenario Run 2 — STOPPED AT STEP 7 — 2026-05-27T05:21:20Z
+======================================================================
