@@ -1,11 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# v8.19 — Audit incremental/total snapshot storage for a backing index
-#
-# Reports how much storage each ILM and SLM snapshot consumes for a
-# specific backing index. Useful for understanding snapshot overhead
-# before deleting old snapshots.
+# v8.19 variant — check snapshot data size
+# ==========================================
 #
 # Required .env parameters:
 # ---------------------------------
@@ -15,7 +12,7 @@
 # API_KEY   — Base64-encoded Elasticsearch API key with at least:
 #               - cluster privilege: monitor (for _snapshot APIs)
 #               - index privilege:   monitor on target indices
-#             Generate in Kibana → Stack Management → API Keys, or via:
+#             Generate one in Kibana → Stack Management → API Keys, or via:
 #               POST /_security/api_key
 #               { "name": "snapshot-audit", "role_descriptors": {
 #                   "snapshot_reader": {
@@ -27,12 +24,11 @@
 # ---------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$PROJECT_ROOT/.env"
+source "$SCRIPT_DIR/.env"
 
 REPOSITORY="found-snapshots"
 
-# The specific backing index you want to audit (pass as $1, or uses default)
+# The specific backing index you want to audit
 TARGET_INDEX="${1:-.ds-logs-mytest-v8-default-2026.05.27-000001}"
 
 echo "=== Analyzing snapshot footprint for index: $TARGET_INDEX ==="
@@ -61,14 +57,14 @@ echo "--------------------------------------------------------------------------
 # 2. Loop through each snapshot to get the specific index size
 for snap in $SNAPSHOTS; do
   # v8.19 ILM snapshots: <YYYY.MM.DD>-<index>-<policy>-<uuid>
-  # v8.19 SLM snapshots: cloud-snapshot-<date>-<uuid> (or similar)
+  # v8.19 SLM snapshots: cloud-snapshot-<date>-<uuid>
   if [[ "$snap" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}- ]]; then
     TYPE="ILM"
   else
     TYPE="SLM"
   fi
 
-  # Query the _status API and extract stats for our target index
+  # Query the _status API and extract the stats for our target index
   STATS=$(curl -s -X GET "$ES_URL/_snapshot/$REPOSITORY/$snap/_status" \
     -H "Authorization: ApiKey $API_KEY" | \
     jq -r --arg idx "$TARGET_INDEX" '

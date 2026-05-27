@@ -1,29 +1,23 @@
 #!/bin/bash
 
 # ==========================================
-# v8.19 — Delete ILM snapshots older than N minutes
-#
-# In v8.19, ILM snapshots use a date-based naming prefix:
-#   <YYYY.MM.DD>-<index-name>-<policy-name>-<uuid>
-# This is distinct from v9.x which uses "ilm-searchable-snapshot-" prefix.
-#
-# Credentials are loaded from the project-root .env file.
+# v8.19 variant — cleanup ILM snapshots
 # ==========================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$PROJECT_ROOT/.env"
+source "$SCRIPT_DIR/.env"
 
 REPOSITORY="found-snapshots"
 
-# How many minutes old a snapshot must be to get deleted (default: 10)
+# For testing: how many minutes old a snapshot must be to get deleted
 MINUTES_OLD="${1:-10}"
 THRESHOLD_MS=$((MINUTES_OLD * 60 * 1000))
 
 echo "=== v8.19 Cleanup — ILM snapshots older than $MINUTES_OLD minutes ==="
 
-# v8.19 ILM snapshots are identified by the YYYY.MM.DD- date prefix.
-# (v9.x uses "ilm-searchable-snapshot-..." — NOT applicable here.)
+# v8.19 ILM snapshot naming: <YYYY.MM.DD>-<index-name>-<policy-name>-<uuid>
+# (v9.x uses "ilm-searchable-snapshot-..." prefix — NOT applicable here)
+# We identify ILM snapshots by their date-prefix pattern: starts with YYYY.MM.DD-
 echo "Searching for target snapshots..."
 SNAPSHOTS_TO_DELETE=$(curl -s -X GET "$ES_URL/_snapshot/$REPOSITORY/_all" \
   -H "Authorization: ApiKey $API_KEY" | \

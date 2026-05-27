@@ -77,14 +77,14 @@ runs/              Raw captured output from completed test runs
 ### 1. Set up credentials
 
 ```bash
-cp .env.example .env_v8.19   # or .env_v9.4
-# Edit .env_v8.19 and fill in ES_URL and API_KEY
+cp .env.example .env
+# Edit .env and fill in ES_URL and API_KEY
 ```
 
 ### 2. Verify connectivity
 
 ```bash
-source .env_v8.19
+source .env
 curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
   jq '{version: .version.number, cluster_name: .cluster_name}'
 ```

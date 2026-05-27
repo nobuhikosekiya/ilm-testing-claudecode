@@ -1,18 +1,12 @@
 #!/bin/bash
 
 # ==========================================
-# v8.19 — Restore a deleted backing index from its ILM snapshot
-#
-# In v8.19, ILM snapshots contain the raw .ds-... backing index
-# name directly (no fm-clone- prefix as in v9.2+).
-# Snapshot naming: <YYYY.MM.DD>-<index-name>-<policy-name>-<uuid>
-#
-# Credentials are loaded from the project-root .env file.
+# v8.19 variant — no fm-clone step
+# ILM snapshots contain the raw .ds-... backing index name directly.
 # ==========================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$PROJECT_ROOT/.env"
+source "$SCRIPT_DIR/.env"
 
 REPOSITORY="found-snapshots"
 TARGET_INDEX="${1:-}"   # Pass the .ds-... backing index name as $1
@@ -20,7 +14,7 @@ RESTORE_PREFIX="restored2-"
 
 if [ -z "$TARGET_INDEX" ]; then
   echo "Usage: $0 <backing-index-name>"
-  echo "  e.g. $0 .ds-logs-mytest-v8-default-2026.05.27-000001"
+  echo "  e.g. $0 .ds-logs-mytest-default-2026.05.27-000001"
   exit 1
 fi
 
@@ -47,7 +41,7 @@ if [ -z "$SNAPSHOT_NAME" ] || [ "$SNAPSHOT_NAME" == "null" ]; then
 fi
 echo "Found snapshot: $SNAPSHOT_NAME"
 
-# 2. Restore — rename_pattern strips ".ds-" prefix → restored2-<rest>
+# 2. Restore — rename_pattern strips ".ds-" prefix → restored-<rest>
 #    (No fm-clone prefix to deal with in v8.19.)
 echo ""
 echo "[2] Executing restore..."
@@ -78,7 +72,6 @@ if [ "$ACCEPTED" == "true" ]; then
   echo "Check recovery      : GET _cat/recovery/$RESTORED_NAME?v"
 
   # 3. Un-hide the restored index so wildcard searches work
-  #    v8.19 restored indices inherit index.hidden = true from the frozen-tier mount.
   echo ""
   echo "[3] Un-hiding restored index (index.hidden = false)..."
   sleep 5

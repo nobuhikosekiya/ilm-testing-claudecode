@@ -55,7 +55,7 @@ All scripts resolve the project root from their own location. Run from anywhere.
 
 ```bash
 # Verify cluster connectivity (confirm version before every test)
-source .env_v8.19
+source .env
 curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
   jq '{version: .version.number, cluster_name: .cluster_name}'
 
@@ -86,7 +86,7 @@ curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
 
 ## Credentials
 
-- Each version has its own env file: `.env_v8.19`, `.env_v9.4`, etc. — all gitignored.
+- Each version has its own env file: `.env`, `.env_v9.4`, etc. — all gitignored.
 - Copy `.env.example` → `.env_v<X.Y>` and fill in `ES_URL` and `API_KEY`.
 - Always `source` the correct env file at the start of every shell command block.
 - Never hardcode credentials in scripts or output files.
@@ -97,7 +97,7 @@ curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
 
 1. Verify cluster connectivity and confirm the version matches what is being tested:
    ```bash
-   source .env_v8.19
+   source .env
    curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | jq '{version: .version.number, cluster_name: .cluster_name}'
    ```
 2. Confirm no leftover resources from a previous run (data stream, restored indices, ILM snapshots, policy, template).

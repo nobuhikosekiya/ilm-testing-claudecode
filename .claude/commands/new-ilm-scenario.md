@@ -162,7 +162,7 @@ If the `scripts/<version>/` directory does not exist:
    - v8.x → copy from `scripts/v8.19/`
    - v9.x → copy from `scripts/v9.4/`
 2. In each script, update the `source` line:
-   - Change `.env_v8.19` or `.env_v9.4` → `.env_<new_version>`
+   - Change `.env` or `.env_v9.4` → `.env_<new_version>`
 3. Update version comments in the script headers
 4. Tell the user: "Created `scripts/<version>/`. You'll need to create `.env_<version>` from `.env.example` before running the scripts."
 
