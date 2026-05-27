@@ -68,7 +68,7 @@ runs/              Raw captured output from completed test runs
 
 - `curl` and `jq` installed
 - An Elastic Cloud deployment (ESS or ECE) running the version you want to test
-- An API key with at minimum: `monitor`, `manage_ilm`, `manage_slm`, `manage_index_templates` cluster privileges and `all` index privileges on `logs-mytest-*`
+- An API key with at minimum: `manage`, `monitor`, `manage_ilm`, `manage_slm`, `manage_index_templates` cluster privileges and `all` index privileges on `logs-mytest-*`
 
 ---
 
