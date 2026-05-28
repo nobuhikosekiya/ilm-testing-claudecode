@@ -2,7 +2,7 @@
 v8.19 hot_cold_frozen Test Scenario — 2026-05-28T00:38:16Z
 ======================================================================
 
-Scenario file : scenarios/v8.19/hot_cold_frozen.txt
+Scenario file : scenarios/v8.19/hot_cold_frozen_delete.txt
 Output file   : runs/v8.19/hot_cold_frozen_run2.txt
 Cluster       : nobu-ilm-083e6e (v8.19.15)
 

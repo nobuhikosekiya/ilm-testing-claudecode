@@ -2,8 +2,8 @@
 v8.19 slm_backup Test Scenario — 2026-05-28T03:07:21Z
 ======================================================================
 
-Scenario file : scenarios/v8.19/slm_backup.txt
-Output file   : runs/v8.19/slm_backup.txt
+Scenario file : scenarios/v8.19/longslm_restore_post_frozen.txt
+Output file   : runs/v8.19/longslm_restore_post_frozen.txt
 Cluster       : (Elastic Cloud — nobu-ilm-083e6e, asia-northeast1)
 
 

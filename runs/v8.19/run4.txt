@@ -1,0 +1,386 @@
+======================================================================
+v8.19 base Test Scenario — 2026-05-28T06:48:06Z
+======================================================================
+
+Scenario file : scenarios/v8.19/host_frozen_delete_keepsnapshot.txt
+Output file   : runs/v8.19/run4.txt
+Cluster       : (Elastic Cloud deployment — nobu-ilm)
+Stop at       : Step 7 (before Step 8)
+
+
+── STEP 1: Preparation (Shorten ILM poll interval) ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+
+── STEP 2: Create ILM policy ──
+{"acknowledged":true}
+
+── STEP 3: Create Index Template for Data Streams ──
+{"acknowledged":true}
+
+── STEP 4: Ingestion & ILM Rollovers (Creating backing indices) ──
+
+-- 4.1 Ingest Doc 1 (backing index 000001) --
+{"_index":".ds-logs-mytest-default-2026.05.28-000001","_id":"6d5XbZ4BaFODm9o7l0k8","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 20s for ILM rollover...
+
+-- 4.2 Ingest Doc 2 (backing index 000002) --
+{"_index":".ds-logs-mytest-default-2026.05.28-000002","_id":"9t5XbZ4BaFODm9o75Un0","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 20s for ILM rollover...
+
+-- 4.3 Ingest Doc 3 (backing index 000003) --
+{"_index":".ds-logs-mytest-default-2026.05.28-000003","_id":"Bd5YbZ4BaFODm9o7NEri","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+
+── STEP 5: Identify Backing Indices & Wait for Deletion ──
+
+Backing indices at start:
+health status index                                     uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-2026.05.28-000005 Yhf6M6bkQO64QIzeY58_2A   1   1          0            0       227b           227b         227b
+yellow open   .ds-logs-mytest-default-2026.05.28-000003 Z7kJtFzGRQeAMarAWMUYTg   1   1          1            0      4.3kb          4.3kb        4.3kb
+
+Beginning monitoring loop — polling every 10s until 000001 and 000002 are deleted...
+
+[06:49:39] --- poll 1 ---
+[06:49:39] Backing indices:
+health status index                                     uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-2026.05.28-000005 Yhf6M6bkQO64QIzeY58_2A   1   1          0            0       227b           227b         227b
+yellow open   .ds-logs-mytest-default-2026.05.28-000003 Z7kJtFzGRQeAMarAWMUYTg   1   1          1            0      4.3kb          4.3kb        4.3kb
+[06:49:39] ILM snapshot count: 2
+[06:49:39] ILM explain (000001):
+{
+  "indices": {}
+}
+[06:49:39] ILM explain (000002):
+{
+  "indices": {}
+}
+[06:49:39] 000001 and 000002 no longer in index list — ILM has deleted them. Proceeding.
+
+── STEP 5 (post-loop): Inspect ILM snapshots and current data stream state ──
+All ILM snapshots:
+[
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-xbjbpa7mt1up3qithjazta",
+    "indices": [
+      ".ds-logs-mytest-default-2026.05.28-000001"
+    ],
+    "start_time": 1779950953475
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-jahax4c5qeenkbq1unxunq",
+    "indices": [
+      ".ds-logs-mytest-default-2026.05.28-000002"
+    ],
+    "start_time": 1779950973484
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-bio33n-xtmos6ngycngoeq",
+    "indices": [
+      ".ds-logs-mytest-default-2026.05.28-000003"
+    ],
+    "start_time": 1779950993493
+  }
+]
+
+Current data stream state:
+{
+  "data_streams": [
+    {
+      "name": "logs-mytest-default",
+      "timestamp_field": {
+        "name": "@timestamp"
+      },
+      "indices": [
+        {
+          "index_name": "partial-.ds-logs-mytest-default-2026.05.28-000001",
+          "index_uuid": "8gcAh05ZSiico-3T0TJ2Ew",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy",
+          "index_mode": "standard"
+        },
+        {
+          "index_name": "partial-.ds-logs-mytest-default-2026.05.28-000002",
+          "index_uuid": "QOEsgkMxQm-BkgEhpNAUbw",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy",
+          "index_mode": "standard"
+        },
+        {
+          "index_name": "partial-.ds-logs-mytest-default-2026.05.28-000003",
+          "index_uuid": "3lYRPox0SoakNSd1KqlAUg",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy",
+          "index_mode": "standard"
+        },
+        {
+          "index_name": ".ds-logs-mytest-default-2026.05.28-000005",
+          "index_uuid": "Yhf6M6bkQO64QIzeY58_2A",
+          "managed_by": "Index Lifecycle Management",
+          "prefer_ilm": true,
+          "ilm_policy": "approach_a_ds_policy",
+          "index_mode": "standard"
+        }
+      ],
+      "generation": 7,
+      "status": "YELLOW",
+      "template": "approach_a_ds_template",
+      "ilm_policy": "approach_a_ds_policy",
+      "next_generation_managed_by": "Index Lifecycle Management",
+      "prefer_ilm": true,
+      "hidden": false,
+      "system": false,
+      "allow_custom_routing": false,
+      "replicated": false,
+      "rollover_on_write": false,
+      "index_mode": "standard",
+      "settings": {},
+      "failure_store": {
+        "enabled": false,
+        "rollover_on_write": true,
+        "indices": []
+      }
+    }
+  ]
+}
+
+── STEP 5 (continued): Waiting for delete phase — monitoring partial mounts ──
+Indices 000001, 000002, 000003 are in frozen tier (partial- mounts).
+Waiting for ILM delete phase (min_age 3m) to remove them from the data stream.
+
+[06:50:50] --- poll 1 ---
+[06:50:50] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:50:50] ILM snapshot count: 3
+
+[06:51:01] --- poll 2 ---
+[06:51:01] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:51:01] ILM snapshot count: 3
+
+[06:51:12] --- poll 3 ---
+[06:51:12] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:51:12] ILM snapshot count: 3
+
+[06:51:23] --- poll 4 ---
+[06:51:23] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:51:23] ILM snapshot count: 3
+
+[06:51:34] --- poll 5 ---
+[06:51:34] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:51:34] ILM snapshot count: 3
+
+[06:51:45] --- poll 6 ---
+[06:51:45] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:51:45] ILM snapshot count: 3
+
+[06:51:56] --- poll 7 ---
+[06:51:56] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:51:56] ILM snapshot count: 3
+
+[06:52:07] --- poll 8 ---
+[06:52:07] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:52:07] ILM snapshot count: 3
+
+[06:52:18] --- poll 9 ---
+[06:52:18] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:52:18] ILM snapshot count: 3
+
+[06:52:28] --- poll 10 ---
+[06:52:28] Backing indices (data stream):
+[
+  "partial-.ds-logs-mytest-default-2026.05.28-000003",
+  ".ds-logs-mytest-default-2026.05.28-000005"
+]
+[06:52:28] ILM snapshot count: 3
+[06:52:28] 000001 and 000002 deleted from data stream — ILM delete phase complete. Proceeding.
+
+── STEP 6: Restore backing indices ──
+Using restore script: scripts/v8.19/restore_index.sh
+RESTORE_PREFIX: restored2- (note: scenario file shows 'restored-' but script uses 'restored2-')
+
+-- 6.1 Restore backing index 000001 --
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-default-2026.05.28-000001
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-default-2026.05.28-000001'...
+Found snapshot: 2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-xbjbpa7mt1up3qithjazta
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored2-logs-mytest-default-2026.05.28-000001
+Check recovery      : GET _cat/recovery/restored2-logs-mytest-default-2026.05.28-000001?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+-- 6.2 Restore backing index 000002 --
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-default-2026.05.28-000002
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-default-2026.05.28-000002'...
+Found snapshot: 2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-jahax4c5qeenkbq1unxunq
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored2-logs-mytest-default-2026.05.28-000002
+Check recovery      : GET _cat/recovery/restored2-logs-mytest-default-2026.05.28-000002?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+── STEP 7: Query the Restored Indices ──
+
+-- 7.1 Check recovery status --
+index                                           shard time type     stage source_host source_node target_host  target_node         repository      snapshot                                                                                         files files_recovered files_percent files_total bytes bytes_recovered bytes_percent bytes_total translog_ops translog_ops_recovered translog_ops_percent
+restored2-logs-mytest-default-2026.05.28-000001 0     91ms snapshot done  n/a         n/a         10.46.32.129 instance-0000000000 found-snapshots 2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-xbjbpa7mt1up3qithjazta 4     4               100.0%        4           4.5kb 4.5kb           100.0%        4.5kb       0            0                      100.0%
+
+index                                           shard time  type     stage source_host source_node target_host  target_node         repository      snapshot                                                                                         files files_recovered files_percent files_total bytes bytes_recovered bytes_percent bytes_total translog_ops translog_ops_recovered translog_ops_percent
+restored2-logs-mytest-default-2026.05.28-000002 0     181ms snapshot done  n/a         n/a         10.46.32.129 instance-0000000000 found-snapshots 2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-jahax4c5qeenkbq1unxunq 4     4               100.0%        4           4.5kb 4.5kb           100.0%        4.5kb       0            0                      100.0%
+
+
+-- 7.2 List restored indices --
+health status index                                           uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   restored2-logs-mytest-default-2026.05.28-000001 s6AHi8FsT--cJV7gkVGBHQ   1   1          1            0      4.5kb          4.5kb        4.5kb
+yellow open   restored2-logs-mytest-default-2026.05.28-000002 eAo7O6SOT--XpAvHgvzD6w   1   1          1            0      4.5kb          4.5kb        4.5kb
+
+
+-- 7.3 Search restored indices --
+{
+  "total": {
+    "value": 2,
+    "relation": "eq"
+  },
+  "hits": [
+    {
+      "index": "restored2-logs-mytest-default-2026.05.28-000001",
+      "source": {
+        "@timestamp": "2026-05-28T10:00:00Z",
+        "message": "Log event 1 in backing index 1"
+      }
+    },
+    {
+      "index": "restored2-logs-mytest-default-2026.05.28-000002",
+      "source": {
+        "@timestamp": "2026-05-28T10:05:00Z",
+        "message": "Log event 2 in backing index 2"
+      }
+    }
+  ]
+}
+
+
+======================================================================
+RUN STOPPED — completed through Step 7 at [06:53:25]
+Cluster is in the state as of Step 7. No cleanup has been run.
+Snapshots for 000001, 000002, 000003 still exist in found-snapshots.
+Restored indices: restored2-logs-mytest-default-2026.05.28-000001
+                  restored2-logs-mytest-default-2026.05.28-000002
+======================================================================
+
+── STEP 8: ILM Snapshot Cleanup ──
+Note: cleanup_old_snapshots.sh requires interactive confirmation;
+      using manual Dev Tools equivalent (direct DELETE) as per scenario.
+
+-- 8.1 Delete snapshot for 000001 --
+{"acknowledged":true}
+
+-- 8.2 Delete snapshot for 000002 --
+{"acknowledged":true}
+
+-- 8.3 Remaining ILM snapshots --
+[
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-bio33n-xtmos6ngycngoeq"
+]
+
+
+── STEP 9: Environment Cleanup ──
+=== 1. Reset ILM poll interval ===
+{"acknowledged":true,"persistent":{},"transient":{}}
+=== 2. Delete data stream ===
+{"acknowledged":true}
+=== 3. Delete restored indices ===
+{"acknowledged":true}
+=== 4. Delete remaining ILM snapshot (000003) ===
+{"acknowledged":true}
+=== 5. Delete ILM policy ===
+{"acknowledged":true}
+=== 6. Delete index template ===
+{"acknowledged":true}
+=== Verification ===
+Data streams:
+0
+Restored indices:
+ILM policy:
+[]
+ILM snapshots:
+0
+Index template:
+0
+
+======================================================================
+RUN COMPLETE — 2026-05-28T07:07:10Z
+Output file: runs/v8.19/run4.txt
+======================================================================

@@ -12,8 +12,8 @@ Follow these rules every time a test is executed.
 ```
 scenarios/         Kibana Dev Tools command sequences
   v<X.Y>/
-    base.txt             Base ILM restore test
-    slm.txt              Extended: SLM unreliability demo
+    host_frozen_delete_keepsnapshot.txt             Base ILM restore test
+    normal_slm_usage_with_frozen.txt              Extended: SLM unreliability demo
     slm_waitfor.txt      Extended: wait_for_snapshot stall trap
 
 scripts/           Shell utilities
@@ -32,13 +32,13 @@ docs/
 runs/              Raw captured test output
   v<X.Y>/
     run1.txt, run2.txt, ...
-    slm.txt, slm_waitfor.txt
+    normal_slm_usage_with_frozen.txt, slm_waitfor.txt
 ```
 
 | Path pattern | Purpose |
 |---|---|
-| `scenarios/<version>/base.txt` | Kibana Dev Tools sequence for the base ILM restore test |
-| `scenarios/<version>/slm.txt` | Extended variant demonstrating SLM unreliability |
+| `scenarios/<version>/host_frozen_delete_keepsnapshot.txt` | Kibana Dev Tools sequence for the base ILM restore test |
+| `scenarios/<version>/normal_slm_usage_with_frozen.txt` | Extended variant demonstrating SLM unreliability |
 | `scenarios/<version>/slm_waitfor.txt` | Variant demonstrating the `wait_for_snapshot` trap |
 | `runs/<version>/run<N>.txt` | Raw captured output from a completed test run |
 | `docs/findings/<version>-<variant>.md` | Human-readable findings summary |
@@ -62,8 +62,11 @@ curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
 # Restore a deleted backing index from its ILM snapshot
 ./scripts/v8.19/restore_index.sh .ds-logs-mytest-v8-default-2026.05.27-000001
 
-# Delete ILM snapshots older than N minutes (default: 10)
-./scripts/v8.19/cleanup_old_snapshots.sh [minutes_old]
+# Dry-run: list ILM snapshots matching keyword (no deletion performed)
+./scripts/v8.19/cleanup_old_snapshots.sh <keyword> [minutes_old]
+
+# Delete (only after reviewing the dry-run list and receiving user confirmation):
+./scripts/v8.19/cleanup_old_snapshots.sh <keyword> [minutes_old] --execute
 
 # Audit snapshot storage for a specific backing index
 ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-v8-default-2026.05.27-000001
@@ -73,13 +76,13 @@ curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
 
 ## File naming
 
-- Scenario files live under `scenarios/<version>/` with short names: `base.txt`, `slm.txt`, `slm_waitfor.txt`.
+- Scenario files live under `scenarios/<version>/` with short names: `host_frozen_delete_keepsnapshot.txt`, `normal_slm_usage_with_frozen.txt`, `slm_waitfor.txt`.
 - Scripts live under `scripts/<version>/` with short names: `restore_index.sh`, etc.
 - Never overwrite or modify an existing file. Check before creating.
 - Output files: `runs/<version>/run<N>.txt`
   - First run: `runs/v8.19/run1.txt`
   - Subsequent runs: `runs/v8.19/run2.txt`, `run3.txt`, …
-  - Variant runs: `runs/v8.19/slm.txt`, `runs/v8.19/slm_waitfor.txt`
+  - Variant runs: `runs/v8.19/normal_slm_usage_with_frozen.txt`, `runs/v8.19/slm_waitfor.txt`
 - Before creating any output file, list existing files and confirm the next available name.
 
 ---
@@ -107,7 +110,7 @@ curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
 
 ## Running the test
 
-- Execute each step in order, mirroring the corresponding `scenarios/<version>/base.txt`.
+- Execute each step in order, mirroring the corresponding `scenarios/<version>/host_frozen_delete_keepsnapshot.txt`.
 - Write **all** output — both the command labels and raw API responses — to the output file using `tee`.
 - Print a `[HH:MM:SS]` timestamp on every monitoring poll line so the timeline is clear in the output file.
 - During the ILM monitoring loop (Step 5), log both the current backing index list and the ILM snapshot count on every tick.
@@ -146,14 +149,38 @@ After every completed test run, create a summary file **before** starting cleanu
 
 ## Cleanup
 
-- Never run cleanup unless the user explicitly says "cleanup" or "clean up".
-- Cleanup must cover all resources created in that run:
+There are two distinct cleanup phases — treat them differently:
+
+### Phase A — In-scenario snapshot cleanup (Step 8)
+
+The scenario's Step 8 (`cleanup_old_snapshots.sh`) is **part of the test** and must be executed during the run, not deferred. Execute it using the required two-step process below. Do not skip or defer it unless the user explicitly asks to stop before Step 8.
+
+### Phase B — Full environment teardown (Step 9)
+
+Step 9 destroys all remaining resources (poll interval, data stream, restored indices, policy, template). **Never run Step 9 unless the user explicitly says "cleanup" or "clean up".** Resources to cover:
   - ILM poll interval (reset to null)
   - Data stream
   - Restored indices (check both `restored-` and `restored2-` prefixes, or whatever prefix the restore script uses)
-  - ILM snapshots (via `scripts/<version>/cleanup_old_snapshots.sh`)
   - ILM policy
   - Index template
+
+### Snapshot deletion — required two-step process
+
+**Never pass `--execute` to `cleanup_old_snapshots.sh` without explicit user confirmation, even in Auto mode.**
+
+Always follow this two-step process:
+
+1. **Dry-run first** — run without `--execute` to list the snapshots that would be deleted:
+   ```bash
+   ./scripts/<version>/cleanup_old_snapshots.sh <keyword> [minutes_old]
+   ```
+2. **Show the list to the user** and wait for explicit confirmation ("yes", "go ahead", "delete them", etc.).
+3. **Only then** re-run with `--execute`:
+   ```bash
+   ./scripts/<version>/cleanup_old_snapshots.sh <keyword> [minutes_old] --execute
+   ```
+
+The `<keyword>` must be at least 5 characters and must appear in the snapshot name (use a distinctive fragment of the data stream name, e.g. `mytest`). `minutes_old` defaults to a very large value (effectively "all") if omitted — always pass an explicit value during test cleanup.
 
 ---
 

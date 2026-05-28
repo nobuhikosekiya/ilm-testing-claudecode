@@ -2,8 +2,8 @@
 v8.19 hot_cold_frozen Test Scenario — 2026-05-27T23:21:48Z
 ======================================================================
 
-Scenario file : scenarios/v8.19/hot_cold_frozen.txt
-Output file   : runs/v8.19/hot_cold_frozen.txt
+Scenario file : scenarios/v8.19/hot_cold_frozen_delete.txt
+Output file   : runs/v8.19/hot_cold_frozen_delete.txt
 Cluster       : nobu-ilm-083e6e (Elastic Cloud, v8.19.15)
 ES version    : 8.19.15
 Restore prefix: restored2- (from scripts/v8.19/restore_index.sh)
@@ -1169,7 +1169,7 @@ ILM snapshots remaining:
 
 ======================================================================
 RUN COMPLETE — 2026-05-28T00:15:39Z
-Output file: runs/v8.19/hot_cold_frozen.txt
+Output file: runs/v8.19/hot_cold_frozen_delete.txt
 ======================================================================
 
 ── [00:22:25] CLEANUP ──

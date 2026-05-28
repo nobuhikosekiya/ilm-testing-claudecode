@@ -53,8 +53,8 @@
 //
 // ⚠️  NAMESPACE COLLISION WARNING
 // This scenario uses the "default" namespace: logs-mytest-default-default.
-// Do NOT run this simultaneously with scenarios/v8.19/base.txt or
-// scenarios/v8.19/slm.txt on the same cluster (those use logs-mytest-default,
+// Do NOT run this simultaneously with scenarios/v8.19/host_frozen_delete_keepsnapshot.txt or
+// scenarios/v8.19/normal_slm_usage_with_frozen.txt on the same cluster (those use logs-mytest-default,
 // and both scenarios register a template matching logs-mytest-*).
 // Always confirm no leftover resources before starting.
 //
@@ -558,8 +558,13 @@ GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
 // DELETE _snapshot/found-snapshots/<ilm_snapshot_for_000004>
 // DELETE _snapshot/found-snapshots/<ilm_snapshot_for_000005>
 
-// [BASH ALTERNATIVE]: ./scripts/v8.19/cleanup_old_snapshots.sh
-// (pass a small minutes_old value, e.g. 1, to remove ILM snapshots from this session)
+// [BASH ALTERNATIVE]: Two-step process — dry-run first, then confirm before deleting:
+//   Step 1 (dry-run, no deletion):
+//     ./scripts/v8.19/cleanup_old_snapshots.sh <keyword> <minutes_old>
+//     e.g.: ./scripts/v8.19/cleanup_old_snapshots.sh mytest 30
+//   Step 2 (delete — only after user confirms the dry-run list):
+//     ./scripts/v8.19/cleanup_old_snapshots.sh <keyword> <minutes_old> --execute
+// Use a small minutes_old (e.g. 30) to target only ILM snapshots from this session.
 
 // Delete all 10 SLM snapshots (named approach-a-storage-cost-<date>[-<N>]):
 // DELETE _snapshot/found-snapshots/<slm_pre_1>

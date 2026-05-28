@@ -24,7 +24,8 @@
 //
 //      The scenario demonstrates manual Dev Tools deletion and points to
 //      the companion `./scripts/v8.19/cleanup_old_snapshots.sh` script, which
-//      automates age-based snapshot deletion.
+//      automates age-based snapshot deletion (dry-run by default; requires
+//      --execute flag to delete after user confirms the preview list).
 //
 // In short: this is the end-to-end reference for "post-Frozen-delete
 // restore from ILM snapshot" on v8.19 data streams.
@@ -221,8 +222,14 @@ GET restored-logs-mytest-*/_search
 // ---------------------------------------------------------------------
 // Step 8: 👉 BASH SCRIPT INTEGRATION (Cleanup Phase)
 // ---------------------------------------------------------------------
-// [BASH SCRIPT USAGE]: Same as before, schedule `cleanup_old_snapshots.sh`
-// to delete ILM snapshots older than 2 years.
+// [BASH SCRIPT USAGE]: Two-step process — dry-run first, then confirm before deleting:
+//   Step 1 (dry-run, no deletion):
+//     ./scripts/v8.19/cleanup_old_snapshots.sh <keyword> <minutes_old>
+//     e.g.: ./scripts/v8.19/cleanup_old_snapshots.sh mytest 1051200
+//   Step 2 (delete — only after user confirms the dry-run list):
+//     ./scripts/v8.19/cleanup_old_snapshots.sh <keyword> <minutes_old> --execute
+// <keyword>: distinctive fragment from the data stream name (min 5 chars, e.g. "mytest")
+// <minutes_old>: 1051200 = ~2 years; use a small value (e.g. 30) during test cleanup
 
 // [MANUAL DEV TOOLS EQUIVALENT]:
 DELETE _snapshot/found-snapshots/<snapshot_name_for_000001>

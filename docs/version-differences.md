@@ -73,4 +73,4 @@ SLM snapshots are **not reliable** as a recovery mechanism for ILM-managed froze
 | Restore a deleted backing index | `scripts/v8.19/restore_index.sh` | `scripts/v9.4/restore_index.sh` |
 | Clean up old ILM snapshots | `scripts/v8.19/cleanup_old_snapshots.sh` | `scripts/v9.4/cleanup_old_snapshots.sh` |
 | Audit snapshot storage | `scripts/v8.19/check_snapshot_datasize.sh` | `scripts/v9.4/check_snapshot_datasize.sh` |
-| Kibana Dev Tools scenario | `scenarios/v8.19/base.txt` | `scenarios/v9.4/base.txt` |
+| Kibana Dev Tools scenario | `scenarios/v8.19/host_frozen_delete_keepsnapshot.txt` | `scenarios/v9.4/host_frozen_delete_keepsnapshot.txt` |

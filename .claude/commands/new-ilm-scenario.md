@@ -52,8 +52,8 @@ After receiving answers:
 
 2. **Identify the best template to base this on:**
    - Same version + same variant → that file (but it exists, so you'd have stopped above)
-   - Same version + different variant → use `scenarios/<version>/base.txt`
-   - Different version, same major (v8.x or v9.x) → use the existing version's `base.txt`
+   - Same version + different variant → use `scenarios/<version>/host_frozen_delete_keepsnapshot.txt`
+   - Different version, same major (v8.x or v9.x) → use the existing version's `host_frozen_delete_keepsnapshot.txt`
    - New major version → read `docs/version-differences.md` carefully; pick the closest existing scenario
 
 3. **Read the chosen template file fully** before generating anything.

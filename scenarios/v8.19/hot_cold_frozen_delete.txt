@@ -39,7 +39,7 @@
 // (no "fm-clone-..." prefix).
 //
 // ⚠️  DESTRUCTIVE: delete_searchable_snapshot: true
-// Unlike the base.txt scenario (which preserves the ILM snapshot with
+// Unlike the host_frozen_delete_keepsnapshot.txt scenario (which preserves the ILM snapshot with
 // delete_searchable_snapshot: false), this policy permanently destroys
 // the ILM snapshot when the delete phase fires. There is no restore path.
 //
@@ -155,7 +155,7 @@ GET _slm/policy/approach_a_default_slm_policy?human
 // priority: 250 ensures this template wins over:
 //   • Built-in "logs" template     (priority: 100, pattern: logs-*-*)
 //   • approach_a_ds_template       (priority: 200, pattern: logs-mytest-*)
-//     used by base.txt / slm.txt / slm_waitfor.txt on this same cluster.
+//     used by host_frozen_delete_keepsnapshot.txt / normal_slm_usage_with_frozen.txt / slm_waitfor.txt on this same cluster.
 // IMPORTANT: "data_stream": {} is required so Elasticsearch treats
 // any write to logs-mytest-default-* as a data stream operation.
 PUT _index_template/approach_a_default_template

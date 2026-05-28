@@ -70,15 +70,15 @@ Claude will delete all resources created during the run: data stream, restored i
 ```
 scenarios/         Kibana Dev Tools command sequences
   v8.19/
-    base.txt              Base ILM restore test
-    slm.txt               Extended: demonstrates SLM snapshot unreliability
+    host_frozen_delete_keepsnapshot.txt              Base ILM restore test
+    normal_slm_usage_with_frozen.txt               Extended: demonstrates SLM snapshot unreliability
     slm_waitfor.txt       Extended: demonstrates the wait_for_snapshot stall trap
-    slm_backup.txt        Positive SLM path: SLM as a reliable sole backup
-    hot_cold_frozen.txt   Hot → Cold → Frozen tiered migration
+    longslm_restore_post_frozen.txt        Positive SLM path: SLM as a reliable sole backup
+    hot_cold_frozen_delete.txt   Hot → Cold → Frozen tiered migration
     slm_storage_cost.txt  SLM snapshot storage cost analysis
   v9.4/
-    base.txt              Base ILM restore test for v9.x
-    slm.txt               SLM variant for v9.x
+    host_frozen_delete_keepsnapshot.txt              Base ILM restore test for v9.x
+    normal_slm_usage_with_frozen.txt               SLM variant for v9.x
 
 scripts/           Shell utilities (used internally by /run-ilm-test)
   v8.19/
@@ -91,17 +91,16 @@ scripts/           Shell utilities (used internally by /run-ilm-test)
 docs/
   version-differences.md    Side-by-side v8.19 vs v9.x behaviour reference
   findings/
-    v8.19-base.md           Results — base restore scenario
-    v8.19-slm-waitfor.md    Results — wait_for_snapshot stall trap
-    v8.19-slm-backup.md     Results — SLM as a reliable backup (positive path)
+    v8.19-host_frozen_delete_keepsnapshot.md           Results — base restore scenario
+    v8.19-longslm_restore_post_frozen.md     Results — SLM as a reliable backup (positive path)
     v8.19-slm-storage-cost.md  Results — SLM snapshot storage cost
-    v8.19-hot-cold-frozen.md   Results — hot/cold/frozen tiered migration
-    v9.4-base.md            Results — v9.4 base restore
+    v8.19-hot_cold_frozen_delete.md   Results — hot/cold/frozen tiered migration
+    v9.4-host_frozen_delete_keepsnapshot.md            Results — v9.4 base restore
 
 runs/              Raw timestamped output from completed test runs
   v8.19/
     run1.txt, run2.txt, run3.txt
-    slm.txt, slm_waitfor.txt, slm_backup.txt, ...
+    normal_slm_usage_with_frozen.txt, slm_waitfor.txt, longslm_restore_post_frozen.txt, ...
   v9.4/
     run1.txt
 ```

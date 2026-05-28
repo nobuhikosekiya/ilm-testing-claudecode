@@ -26,7 +26,7 @@
 // proves SLM works as a reliable backup when the snapshot is taken early
 // enough and retention is set correctly.
 //
-// Contrast with scenarios/v8.19/slm.txt, which demonstrates the NEGATIVE
+// Contrast with scenarios/v8.19/normal_slm_usage_with_frozen.txt, which demonstrates the NEGATIVE
 // case (SLM unreliability when max_count rotation removes the needed snapshot).
 //
 // ⚠️  v8.19 vs v9.2+ DIFFERENCE — NO fm-clone step
@@ -62,7 +62,7 @@ PUT _cluster/settings
 // Policy triggers rollover at 1 document, moves to Frozen,
 // and deletes the backing index after 3 minutes.
 //
-// ⚠️  KEY DIFFERENCE FROM base.txt:
+// ⚠️  KEY DIFFERENCE FROM host_frozen_delete_keepsnapshot.txt:
 //   "delete_searchable_snapshot": true
 // ILM will delete its own searchable snapshot when it deletes the index.
 // This leaves the SLM snapshot as the ONLY recovery mechanism —
@@ -310,9 +310,14 @@ GET restored-slm-logs-mytest-*/_search
 // ---------------------------------------------------------------------
 // Step 8: Cleanup Snapshots
 // ---------------------------------------------------------------------
-// [BASH SCRIPT USAGE]: Run `./scripts/v8.19/cleanup_old_snapshots.sh`
-// to delete ILM snapshots by age. (ILM snapshots were already deleted in
-// this scenario, but the script is safe to run as a verification step.)
+// [BASH SCRIPT USAGE]: Two-step process — dry-run first, then confirm before deleting:
+//   Step 1 (dry-run, no deletion):
+//     ./scripts/v8.19/cleanup_old_snapshots.sh <keyword> <minutes_old>
+//     e.g.: ./scripts/v8.19/cleanup_old_snapshots.sh mytest 30
+//   Step 2 (delete — only after user confirms the dry-run list):
+//     ./scripts/v8.19/cleanup_old_snapshots.sh <keyword> <minutes_old> --execute
+// (ILM snapshots were already deleted in this scenario, but the script is safe
+// to run as a verification step — the dry-run will return an empty list.)
 
 // [MANUAL DEV TOOLS EQUIVALENT]:
 // List snapshots to find the names of the SLM snapshots to delete:
