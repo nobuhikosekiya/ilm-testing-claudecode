@@ -22,10 +22,12 @@
 // The key observation: the data stream transparently searches all tiers
 // at checkpoints A–C. At checkpoint D the data is simply gone.
 //
-// SLM runs every 3 minutes and takes automatic snapshots throughout
+// SLM runs every 15 minutes and takes automatic snapshots throughout
 // the test. It is not used for recovery in this scenario; it is present
 // only to simulate a real-world environment where SLM is running
 // alongside ILM.
+// NOTE: Elastic Cloud enforces a minimum SLM interval of 15 minutes.
+// Schedules more frequent than 15m are rejected with an error.
 //
 // ⚠️  v8.19 vs v9.2+ DIFFERENCE — NO fm-clone step
 // In v9.2+, ILM creates a temporary "fm-clone-<uuid>-" copy of the
@@ -67,6 +69,11 @@ PUT _cluster/settings
 //   hot    — Roll over at 1 document (creates a new backing index per doc).
 //   cold   — min_age: 0m: moves to cold-tier immediately after rollover.
 //            readonly: {} prevents accidental writes on cold nodes.
+//            allocate: {number_of_replicas: 0}: REQUIRED for single-AZ cold
+//            deployments. Without it, the default replica count (1) causes
+//            the ILM migrate action to permanently stall — the only cold node
+//            already holds the replica, so the primary has nowhere to go.
+//            Setting replicas to 0 drops the replica first, freeing the node.
 //   frozen — min_age: 3m: 3 minutes after rollover, ILM creates a
 //            searchable snapshot in "found-snapshots" and mounts it as
 //            a partial (frozen) index. The cold copy is removed.
@@ -85,7 +92,8 @@ PUT _ilm/policy/approach_a_default_policy
       "cold": {
         "min_age": "0m",
         "actions": {
-          "readonly": {}
+          "readonly": {},
+          "allocate": { "number_of_replicas": 0 }
         }
       },
       "frozen": {
@@ -109,19 +117,22 @@ PUT _ilm/policy/approach_a_default_policy
 }
 
 // ---------------------------------------------------------------------
-// Step 2.5: Create SLM policy (auto-runs every 3 minutes)
+// Step 2.5: Create SLM policy (auto-runs every 15 minutes)
 // ---------------------------------------------------------------------
-// Snapshots all indices every 3 minutes; retains up to 5 snapshots.
+// Snapshots all indices every 15 minutes; retains up to 5 snapshots.
 // This SLM policy is not used for recovery in this scenario. It is
 // configured to reflect a realistic setup where SLM runs in parallel
 // with ILM. The SLM snapshots taken here capture each backing index
 // while it is still in the hot tier (before cold/frozen transitions).
 //
+// NOTE: Elastic Cloud enforces a minimum SLM schedule interval of 15m.
+// "0 */3 * * * ?" would be rejected — minimum is "0 */15 * * * ?".
+//
 // SLM snapshot names will be: approach-a-default-slm-<YYYY.MM.DD>[-N]
 PUT _slm/policy/approach_a_default_slm_policy
 {
   "name": "<approach-a-default-slm-{now/d}>",
-  "schedule": "0 */3 * * * ?",
+  "schedule": "0 */15 * * * ?",
   "repository": "found-snapshots",
   "config": {
     "indices": "*",
@@ -135,7 +146,7 @@ PUT _slm/policy/approach_a_default_slm_policy
   }
 }
 
-// Verify the SLM policy was created (confirm next_execution is ~3 min out):
+// Verify the SLM policy was created (confirm next_execution is ~15 min out):
 GET _slm/policy/approach_a_default_slm_policy?human
 
 // ---------------------------------------------------------------------
@@ -265,10 +276,16 @@ GET logs-mytest-default-default/_search
 //      Frozen mount name (v8.19): partial-.ds-logs-mytest-default-default-<date>-000001
 //   3. Removes the cold-tier copy of the backing index.
 //
-// Poll until _ilm/explain shows "phase": "frozen" for 000001:
-GET .ds-logs-mytest-default-default-<date>-000001/_ilm/explain
-// or check for the partial mount appearing:
+// Poll for the partial mount appearing (reliable indicator — the original
+// .ds-... index is deleted when the frozen transition completes, so
+// _ilm/explain on it returns null once frozen):
 GET _cat/indices/partial-.ds-logs-mytest-default-default-*?v&h=index,health,status,docs.count
+
+// Once the partial mount is visible, check ILM state via the PARTIAL mount:
+GET partial-.ds-logs-mytest-default-default-<date>-000001/_ilm/explain
+// Expected: "phase": "frozen", "action": "complete", "step": "complete"
+// NOTE: GET .ds-...-000001/_ilm/explain returns null after frozen transition
+//       (the original backing index no longer exists — replaced by the mount).
 
 // Confirm the ILM snapshot was created:
 GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
@@ -298,16 +315,19 @@ GET logs-mytest-default-default/_search
 //     "policy": {
 //       "phases": {
 //         "hot":    { "actions": { "rollover": { "max_docs": 1 } } },
-//         "cold":   { "min_age": "0m",  "actions": { "readonly": {} } },
+//         "cold":   { "min_age": "0m",  "actions": { "readonly": {}, "allocate": { "number_of_replicas": 0 } } },
 //         "frozen": { "min_age": "3m",  "actions": { "searchable_snapshot": { "snapshot_repository": "found-snapshots" } } },
 //         "delete": { "min_age": "5m",  "actions": { "delete": { "delete_searchable_snapshot": true } } }
 //       }
 //     }
 //   }
 //
-// Poll until the frozen mount for 000001 returns 404:
-GET .ds-logs-mytest-default-default-<date>-000001
+// Poll until the PARTIAL MOUNT for 000001 returns 404 (signals delete complete):
+GET partial-.ds-logs-mytest-default-default-<date>-000001
 // → 404: {"statusCode":404,"error":"Not Found","message":"No indices found"}
+// NOTE: The original .ds-...-000001 was already 404 during the frozen phase;
+//       checking it here would not distinguish frozen from deleted.
+//       The partial-.ds-... mount is the correct thing to watch disappear.
 
 // As each backing index is deleted, the hit count decreases.
 // Repeat this poll and watch the count drop 5 → 4 → 3 → 2 → 1 → 0:
