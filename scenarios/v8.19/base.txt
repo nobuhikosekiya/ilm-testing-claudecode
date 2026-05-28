@@ -23,7 +23,7 @@
 //      delete them after a retention period (e.g. 2 years)?"
 //
 //      The scenario demonstrates manual Dev Tools deletion and points to
-//      the companion `cleanup_old_snapshots_v8.19.sh` script, which
+//      the companion `./scripts/v8.19/cleanup_old_snapshots.sh` script, which
 //      automates age-based snapshot deletion.
 //
 // In short: this is the end-to-end reference for "post-Frozen-delete

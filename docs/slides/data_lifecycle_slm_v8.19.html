@@ -857,7 +857,7 @@ retention:
           <li class="ok-item">Set <code>"delete_searchable_snapshot": false</code> in the Delete phase</li>
           <li class="ok-item">ILM snapshot is taken at Frozen-phase entry — before deletion</li>
           <li class="ok-item">Survives indefinitely until you explicitly clean up</li>
-          <li class="ok-item">Use <code>restore_index_v8.19.sh</code> to recover a specific backing index by name</li>
+          <li class="ok-item">Use <code>./scripts/v8.19/restore_index.sh</code> to recover a specific backing index by name</li>
         </ul>
       </div>
 
@@ -886,7 +886,7 @@ retention:
   }
 
 Cleanup:
-  Run cleanup_old_snapshots_v8.19.sh
+  Run ./scripts/v8.19/cleanup_old_snapshots.sh
   (e.g., delete ILM snaps older than 2 years)
   — on your own schedule, not SLM's
 

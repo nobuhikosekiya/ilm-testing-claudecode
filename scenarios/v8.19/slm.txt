@@ -198,7 +198,7 @@ GET .ds-logs-mytest-default-2026.05.27-000001
 // AT THIS POINT IN REAL LIFE: You know you need data from backing index 1
 // and backing index 2. Since they are deleted, you must restore them one by one.
 
-// [BASH SCRIPT USAGE]: Run `restore_index_v8.19.sh` targeting the exact
+// [BASH SCRIPT USAGE]: Run `./scripts/v8.19/restore_index.sh` targeting the exact
 // backing index name (e.g., TARGET_INDEX=".ds-logs-mytest-default-2026.05.27-000001").
 
 // ℹ️  v8.19 Snapshot Index Naming:
@@ -359,7 +359,7 @@ POST _snapshot/found-snapshots/<newest_slm_snapshot>/_restore
 // ---------------------------------------------------------------------
 // Step 8: 👉 BASH SCRIPT INTEGRATION (Cleanup Phase)
 // ---------------------------------------------------------------------
-// [BASH SCRIPT USAGE]: Same as before, schedule `cleanup_old_snapshots_v8.19.sh`
+// [BASH SCRIPT USAGE]: Same as before, schedule `./scripts/v8.19/cleanup_old_snapshots.sh`
 // to delete ILM snapshots older than 2 years.
 
 // [MANUAL DEV TOOLS EQUIVALENT]:
