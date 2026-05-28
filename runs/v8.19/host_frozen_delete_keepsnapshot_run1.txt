@@ -1,0 +1,182 @@
+======================================================================
+v8.19 ILM Frozen Delete — Restore & Snapshot Cleanup Test
+Started: 2026-05-28T14:52:47Z
+======================================================================
+
+Scenario file : scenarios/v8.19/host_frozen_delete_keepsnapshot.txt
+Output file   : runs/v8.19/host_frozen_delete_keepsnapshot_run1.txt
+Cluster       : (Elastic Cloud deployment — see .env)
+
+── STEP 1: Preparation (Shorten ILM poll interval) ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+
+── STEP 2: Create ILM policy ──
+{"acknowledged":true}
+
+── STEP 3: Create Index Template for Data Streams ──
+{"acknowledged":true}
+
+── STEP 4.1: Ingest Doc 1 (backing index 000001) ──
+{"_index":".ds-logs-mytest-default-2026.05.28-000001","_id":"zd4Tb54BaFODm9o7VUox","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 20s for ILM rollover...
+
+── STEP 4.2: Ingest Doc 2 (backing index 000002) ──
+{"_index":".ds-logs-mytest-default-2026.05.28-000002","_id":"2t4Tb54BaFODm9o7ukox","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 20s for ILM rollover...
+
+── STEP 4.3: Ingest Doc 3 (backing index 000003) ──
+{"_index":".ds-logs-mytest-default-2026.05.28-000003","_id":"894Ub54BaFODm9o7IUoj","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+
+── STEP 5: Identify Backing Indices & Wait for ILM Deletion ──
+Polling every 10s until 000001 and 000002 are deleted by ILM...
+
+
+[14:54:32] --- poll ---
+[14:54:32] Backing indices:
+index                                     health status docs.count store.size
+.ds-logs-mytest-default-2026.05.28-000005 yellow open            0       227b
+.ds-logs-mytest-default-2026.05.28-000003 yellow open            1      4.3kb
+[14:54:32] ILM snapshot count: 2
+[14:54:32] ILM explain (000001 + 000002):
+
+[14:54:32] Both 000001 and 000002 deleted by ILM — proceeding.
+
+── STEP 6: Restore Phase ──
+RESTORE_PREFIX in script: restored2-  (note: differs from scenario .txt comments which say restored-)
+
+[6a] Listing ILM snapshots to identify names for 000001 and 000002:
+[
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-csh0tk3sq9cmletdbgowew",
+    "indices": [
+      ".ds-logs-mytest-default-2026.05.28-000003"
+    ],
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-sq2nsdlxryekznkuqyprhw",
+    "indices": [
+      ".ds-logs-mytest-default-2026.05.28-000002"
+    ],
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-rswivde4stqgfsjejwxmtg",
+    "indices": [
+      ".ds-logs-mytest-default-2026.05.28-000001"
+    ],
+    "state": "SUCCESS"
+  }
+]
+
+[6b] Restoring backing index 000001 via restore_index.sh:
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-default-2026.05.28-000001
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-default-2026.05.28-000001'...
+Found snapshot: 2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-rswivde4stqgfsjejwxmtg
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored2-logs-mytest-default-2026.05.28-000001
+Check recovery      : GET _cat/recovery/restored2-logs-mytest-default-2026.05.28-000001?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+[6c] Restoring backing index 000002 via restore_index.sh:
+=== v8.19 Restore — starting ===
+Target index : .ds-logs-mytest-default-2026.05.28-000002
+Repository   : found-snapshots
+
+[1] Searching for ILM snapshot containing '.ds-logs-mytest-default-2026.05.28-000002'...
+Found snapshot: 2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-sq2nsdlxryekznkuqyprhw
+
+[2] Executing restore...
+Response: {"accepted":true}
+
+SUCCESS: Restore request accepted.
+Restored index name : restored2-logs-mytest-default-2026.05.28-000002
+Check recovery      : GET _cat/recovery/restored2-logs-mytest-default-2026.05.28-000002?v
+
+[3] Un-hiding restored index (index.hidden = false)...
+Un-hide response: {"acknowledged":true}
+
+=== v8.19 Restore — done ===
+
+── STEP 7: Querying the Restored Indices ──
+
+[7a] Waiting for recovery to complete...
+[14:56:21] 000001: yellow open 1 | 000002: yellow open 1
+
+[7b] Search across both restored indices:
+{
+  "hits": {
+    "total": {
+      "value": 2,
+      "relation": "eq"
+    },
+    "docs": [
+      {
+        "_index": "restored2-logs-mytest-default-2026.05.28-000001",
+        "_id": "zd4Tb54BaFODm9o7VUox",
+        "message": "Log event 1 in backing index 1",
+        "@timestamp": "2026-05-27T10:00:00Z"
+      },
+      {
+        "_index": "restored2-logs-mytest-default-2026.05.28-000002",
+        "_id": "2t4Tb54BaFODm9o7ukox",
+        "message": "Log event 2 in backing index 2",
+        "@timestamp": "2026-05-27T10:05:00Z"
+      }
+    ]
+  }
+}
+
+── STEP 8: Snapshot Cleanup (dry-run) ──
+Running cleanup_old_snapshots.sh with keyword=mytest, minutes_old=30 (dry-run, no --execute)
+
+=== v8.19 Cleanup — ILM snapshots older than 30 minutes (keyword: mytest) ===
+Searching for target snapshots...
+No snapshots older than 30 minutes found.
+
+Re-running dry-run with minutes_old=1 (snapshots are only a few minutes old):
+=== v8.19 Cleanup — ILM snapshots older than 1 minutes (keyword: mytest) ===
+Searching for target snapshots...
+
+Snapshots selected for deletion:
+ 1. 2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-rswivde4stqgfsjejwxmtg
+ 2. 2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-sq2nsdlxryekznkuqyprhw
+ 3. 2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-csh0tk3sq9cmletdbgowew
+
+Dry-run mode: no deletions were performed.
+Re-run with --execute to delete the snapshots listed above.
+
+[Step 8 — execute] Deleting snapshots with --execute:
+=== v8.19 Cleanup — ILM snapshots older than 1 minutes (keyword: mytest) ===
+Searching for target snapshots...
+
+Snapshots selected for deletion:
+ 1. 2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-rswivde4stqgfsjejwxmtg
+ 2. 2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-sq2nsdlxryekznkuqyprhw
+ 3. 2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-csh0tk3sq9cmletdbgowew
+
+Deleting: 2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-rswivde4stqgfsjejwxmtg
+ -> Deleted successfully
+Deleting: 2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-sq2nsdlxryekznkuqyprhw
+ -> Deleted successfully
+Deleting: 2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-csh0tk3sq9cmletdbgowew
+ -> Deleted successfully
+
+=== v8.19 Cleanup — done ===
+Deleted 3 snapshot(s).
+
+======================================================================
+RUN COMPLETE — 2026-05-28T15:03:07Z
+Output file: runs/v8.19/host_frozen_delete_keepsnapshot_run1.txt
+======================================================================
