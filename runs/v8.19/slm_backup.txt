@@ -1,0 +1,982 @@
+======================================================================
+v8.19 slm_backup Test Scenario — 2026-05-28T03:07:21Z
+======================================================================
+
+Scenario file : scenarios/v8.19/slm_backup.txt
+Output file   : runs/v8.19/slm_backup.txt
+Cluster       : (Elastic Cloud — nobu-ilm-083e6e, asia-northeast1)
+
+
+── STEP 1: Shorten ILM poll interval to 10s ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+
+── STEP 2: Create ILM policy (delete_searchable_snapshot: true) ──
+{"acknowledged":true}
+
+── STEP 2.5: Create SLM policy (15-min schedule, 3-day retention, no max_count) ──
+{"acknowledged":true}
+Verify SLM policy created:
+{
+  "policy": "0 0/15 * * * ?",
+  "retention": {
+    "expire_after": "3d",
+    "min_count": 1
+  }
+}
+
+
+── STEP 3: Create index template ──
+{"acknowledged":true}
+
+── STEP 4.1: Ingest Doc 1 → backing index 000001 ──
+{"_index":".ds-logs-mytest-default-2026.05.28-000001","_id":"b96NbJ4BaFODm9o7nkmU","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Execute SLM snapshot #1 (captures 000001 while HOT):
+{"snapshot_name":"approach-a-slm-backup-2026.05.28-wugdc3sorwicftfjupusrg"}
+Confirm SLM snapshot 1 completed:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-slm-backup-2026.05.28-wugdc3sorwicftfjupusrg",
+    "start_time_string": "2026-05-28T03:08:01.031Z",
+    "start_time": 1779937681031,
+    "time_string": "2026-05-28T03:08:02.330Z",
+    "time": 1779937682330
+  }
+}
+
+Waiting ~15 seconds for ILM rollover...
+
+── STEP 4.2: Ingest Doc 2 → backing index 000002 ──
+{"_index":".ds-logs-mytest-default-2026.05.28-000002","_id":"f96ObJ4BaFODm9o7GUnn","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Execute SLM snapshot #2 (captures 000002 while HOT):
+{"snapshot_name":"approach-a-slm-backup-2026.05.28-gis-wz2cruoldbf5gxynqg"}
+Confirm SLM snapshot 2 completed:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-slm-backup-2026.05.28-gis-wz2cruoldbf5gxynqg",
+    "start_time_string": "2026-05-28T03:08:32.652Z",
+    "start_time": 1779937712652,
+    "time_string": "2026-05-28T03:08:33.778Z",
+    "time": 1779937713778
+  }
+}
+
+Waiting ~15 seconds for ILM rollover...
+
+── STEP 4.3: Ingest Doc 3 → backing index 000003 ──
+{"_index":".ds-logs-mytest-default-2026.05.28-000003","_id":"md6ObJ4BaFODm9o7ikmc","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Execute SLM snapshot #3 (captures 000003 while HOT):
+{"snapshot_name":"approach-a-slm-backup-2026.05.28-dlkdod7vsmy_kpda5e1aow"}
+Confirm SLM snapshot 3 completed:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-slm-backup-2026.05.28-dlkdod7vsmy_kpda5e1aow",
+    "start_time_string": "2026-05-28T03:09:01.467Z",
+    "start_time": 1779937741467,
+    "time_string": "2026-05-28T03:09:02.660Z",
+    "time": 1779937742660
+  }
+}
+
+All snapshots so far:
+[
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-dlkdod7vsmy_kpda5e1aow",
+    "state": "SUCCESS",
+    "indices": [
+      ".internal.alerts-stack.alerts-default-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".slo-observability.summary-v3.5.temp",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".slo-observability.sli-v3.5",
+      ".ds-logs-mytest-default-2026.05.28-000003",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".apm-source-map",
+      ".ds-logs-mytest-default-2026.05.28-000002",
+      ".slo-observability.summary-v3.5",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      "partial-.ds-logs-mytest-default-2026.05.28-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001"
+    ]
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-2026.05.28-000001"
+    ]
+  },
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-gis-wz2cruoldbf5gxynqg",
+    "state": "SUCCESS",
+    "indices": [
+      ".apm-source-map",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".slo-observability.summary-v3.5",
+      ".ds-logs-mytest-default-2026.05.28-000001",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".ds-logs-mytest-default-2026.05.28-000002",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".slo-observability.sli-v3.5",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".slo-observability.summary-v3.5.temp",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".internal.alerts-stack.alerts-default-000001"
+    ]
+  },
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-wugdc3sorwicftfjupusrg",
+    "state": "SUCCESS",
+    "indices": [
+      ".internal.alerts-streams.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".slo-observability.summary-v3.5.temp",
+      ".ds-logs-mytest-default-2026.05.28-000001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".apm-source-map",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".slo-observability.summary-v3.5",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".slo-observability.sli-v3.5",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.28-23ktuxvjtrusg4z95zdtgw",
+    "state": "SUCCESS",
+    "indices": [
+      ".kibana_security_solution_8.19.15_001",
+      ".security-tokens-7",
+      ".slo-observability.summary-v3.5.temp",
+      ".kibana_8.19.15_001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".kibana_analytics_8.19.15_001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".snapshot-blob-cache",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000012",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".apm-source-map",
+      ".kibana_task_manager_8.19.15_001",
+      ".slo-observability.sli-v3.5",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".async-search",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".apm-custom-link",
+      ".kibana_ingest_8.19.15_001",
+      ".slo-observability.summary-v3.5",
+      ".secrets-inference",
+      ".security-profile-8",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".apm-agent-configuration",
+      "restored-default-logs-mytest-default-default-2026.05.28-000001",
+      ".kibana_usage_counters_8.19.15_001",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".kibana_locks-000001",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".inference",
+      ".security-7",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".kibana_security_session_1"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.28-lxusegrjrokkldzoaulpoq",
+    "state": "SUCCESS",
+    "indices": [
+      ".kibana_security_solution_8.19.15_001",
+      ".security-tokens-7",
+      ".slo-observability.summary-v3.5.temp",
+      ".kibana_8.19.15_001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".kibana_analytics_8.19.15_001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".snapshot-blob-cache",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000012",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".apm-source-map",
+      ".kibana_task_manager_8.19.15_001",
+      ".slo-observability.sli-v3.5",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".async-search",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".apm-custom-link",
+      ".kibana_ingest_8.19.15_001",
+      ".slo-observability.summary-v3.5",
+      ".secrets-inference",
+      ".security-profile-8",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".apm-agent-configuration",
+      "restored-default-logs-mytest-default-default-2026.05.28-000001",
+      ".kibana_usage_counters_8.19.15_001",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".kibana_locks-000001",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".inference",
+      ".security-7",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".kibana_security_session_1"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.28-ppkkwykdtgajhrv418-f1w",
+    "state": "SUCCESS",
+    "indices": [
+      ".kibana_security_solution_8.19.15_001",
+      ".security-tokens-7",
+      ".slo-observability.summary-v3.5.temp",
+      ".kibana_8.19.15_001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".kibana_analytics_8.19.15_001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".snapshot-blob-cache",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000012",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".apm-source-map",
+      ".kibana_task_manager_8.19.15_001",
+      ".slo-observability.sli-v3.5",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".async-search",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".apm-custom-link",
+      ".kibana_ingest_8.19.15_001",
+      ".slo-observability.summary-v3.5",
+      ".secrets-inference",
+      ".security-profile-8",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".apm-agent-configuration",
+      "restored-default-logs-mytest-default-default-2026.05.28-000001",
+      ".kibana_usage_counters_8.19.15_001",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".kibana_locks-000001",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".inference",
+      ".security-7",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".kibana_security_session_1"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000012",
+      ".ds-logs-mytest-default-default-2026.05.28-000008",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000005"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000012",
+      ".ds-logs-mytest-default-default-2026.05.28-000008",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000005"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000005",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000003",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000002",
+      ".ds-logs-mytest-default-default-2026.05.28-000008"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000005",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000003",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000002",
+      ".ds-logs-mytest-default-default-2026.05.28-000008"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000003",
+      ".ds-logs-mytest-default-default-2026.05.28-000005",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000002"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000005",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000002",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000003"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".async-search",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".kibana_ingest_8.19.15_001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000003",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".kibana_security_solution_8.19.15_001",
+      ".apm-agent-configuration",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".snapshot-blob-cache",
+      ".kibana_security_session_1",
+      ".security-profile-8",
+      ".slo-observability.summary-v3.5.temp",
+      ".kibana_8.19.15_001",
+      ".kibana_analytics_8.19.15_001",
+      ".security-tokens-7",
+      ".kibana_task_manager_8.19.15_001",
+      ".slo-observability.summary-v3.5",
+      ".inference",
+      ".kibana_usage_counters_8.19.15_001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".security-7",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".kibana_locks-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".apm-custom-link",
+      ".internal.alerts-default.alerts-default-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000005",
+      ".slo-observability.sli-v3.5",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000002",
+      ".apm-source-map",
+      ".secrets-inference"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000002",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000003"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000002",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000003"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000002"
+    ]
+  },
+  {
+    "snapshot": "approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000002"
+    ]
+  },
+  {
+    "snapshot": "approach-a-default-slm-2026.05.28-mjj05lcxs7scneewqtzxyq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".slo-observability.sli-v3.5",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000003",
+      ".apm-source-map",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".slo-observability.summary-v3.5.temp",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".slo-observability.summary-v3.5",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000005",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000004",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000006",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.28-6hzvpedrrk2ifatkorkpha",
+    "state": "SUCCESS",
+    "indices": [
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000003",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".async-search",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".kibana_ingest_8.19.15_001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".kibana_security_solution_8.19.15_001",
+      ".apm-agent-configuration",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".snapshot-blob-cache",
+      ".kibana_security_session_1",
+      ".security-profile-8",
+      ".slo-observability.summary-v3.5.temp",
+      ".kibana_8.19.15_001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000005",
+      ".ds-logs-mytest-default-default-2026.05.28-000006",
+      ".kibana_analytics_8.19.15_001",
+      ".security-tokens-7",
+      ".kibana_task_manager_8.19.15_001",
+      ".slo-observability.summary-v3.5",
+      ".inference",
+      ".kibana_usage_counters_8.19.15_001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".security-7",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".kibana_locks-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".apm-custom-link",
+      ".internal.alerts-default.alerts-default-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000004",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".slo-observability.sli-v3.5",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".apm-source-map",
+      ".secrets-inference"
+    ]
+  },
+  {
+    "snapshot": "approach-a-default-slm-2026.05.28-gnhnoqugrnsjxxizj_jsua",
+    "state": "SUCCESS",
+    "indices": [
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".slo-observability.summary-v3.5.temp",
+      ".apm-source-map",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000004",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000005",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".internal.alerts-security.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000003",
+      ".kibana-siem-rule-migrations-integrations",
+      ".slo-observability.summary-v3.5",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      "partial-.ds-logs-mytest-default-default-2026.05.28-000002",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".slo-observability.sli-v3.5",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".ds-logs-mytest-default-default-2026.05.28-000006",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.28-cex7hdf2rvcr1yymf5qldw",
+    "state": "SUCCESS",
+    "indices": [
+      ".snapshot-blob-cache",
+      ".kibana_task_manager_8.19.15_001",
+      ".async-search",
+      ".security-profile-8",
+      ".kibana_security_solution_8.19.15_001",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".kibana_locks-000001",
+      ".internal.alerts-security.alerts-default-000001",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".security-7",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".slo-observability.summary-v3.5.temp",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".slo-observability.summary-v3.5",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".security-tokens-7",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".kibana_8.19.15_001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".secrets-inference",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".kibana_security_session_1",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".apm-agent-configuration",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".apm-source-map",
+      ".kibana_usage_counters_8.19.15_001",
+      ".slo-observability.sli-v3.5",
+      ".kibana_analytics_8.19.15_001",
+      ".inference",
+      ".kibana-siem-rule-migrations-integrations",
+      ".kibana_ingest_8.19.15_001",
+      ".apm-custom-link"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.28-jmishb9sqwij-chqud2mmg",
+    "state": "SUCCESS",
+    "indices": [
+      ".async-search",
+      ".kibana_8.19.15_001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".kibana_security_solution_8.19.15_001",
+      ".snapshot-blob-cache",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".security-tokens-7",
+      ".apm-source-map",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".security-profile-8",
+      ".ds-logs-mytest-default-default-2026.05.27-000006",
+      ".kibana-siem-rule-migrations-integrations",
+      ".internal.alerts-security.alerts-default-000001",
+      ".ds-.slm-history-7-2026.05.27-000001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.27-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.27-000002",
+      ".kibana_ingest_8.19.15_001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".kibana_security_session_1",
+      "partial-.ds-logs-mytest-default-default-2026.05.27-000003",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".kibana_analytics_8.19.15_001",
+      ".security-7",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".slo-observability.summary-v3.5",
+      ".slo-observability.sli-v3.5",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      "partial-.ds-logs-mytest-default-default-2026.05.27-000004",
+      ".secrets-inference",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".inference",
+      ".apm-agent-configuration",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".kibana_usage_counters_8.19.15_001",
+      ".apm-custom-link",
+      ".kibana_locks-000001",
+      ".kibana_task_manager_8.19.15_001",
+      ".internal.alerts-observability.threshold.alerts-default-000001",
+      ".slo-observability.summary-v3.5.temp",
+      "partial-.ds-logs-mytest-default-default-2026.05.27-000005"
+    ]
+  },
+  {
+    "snapshot": "cloud-snapshot-2026.05.27-wmigxzfhtfy68rdrr-aypq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.27-000005",
+      ".internal.alerts-dataset.quality.alerts-default-000001",
+      ".internal.alerts-observability.slo.alerts-default-000001",
+      ".internal.alerts-observability.uptime.alerts-default-000001",
+      ".kibana_usage_counters_8.19.15_001",
+      ".kibana-siem-rule-migrations-integrations",
+      ".slo-observability.sli-v3.5",
+      ".inference",
+      ".internal.alerts-ml.anomaly-detection-health.alerts-default-000001",
+      ".ds-.kibana-event-log-ds-2026.05.27-000001",
+      ".security-7",
+      ".slo-observability.summary-v3.5.temp",
+      ".kibana_security_solution_8.19.15_001",
+      ".internal.alerts-observability.apm.alerts-default-000001",
+      ".ds-.logs-deprecation.elasticsearch-default-2026.05.27-000001",
+      ".apm-source-map",
+      ".kibana_locks-000001",
+      ".internal.alerts-streams.alerts-default-000001",
+      ".internal.alerts-observability.logs.alerts-default-000001",
+      ".ds-logs-mytest-default-default-2026.05.27-000004",
+      ".internal.alerts-transform.health.alerts-default-000001",
+      ".ds-ilm-history-7-2026.05.27-000001",
+      ".kibana_security_session_1",
+      ".ds-logs-mytest-default-default-2026.05.27-000003",
+      ".apm-custom-link",
+      ".kibana-siem-rule-migrations-prebuiltrules",
+      ".ds-logs-mytest-default-default-2026.05.27-000006",
+      ".internal.alerts-security.attack.discovery.alerts-default-000001",
+      ".security-profile-8",
+      ".apm-agent-configuration",
+      ".secrets-inference",
+      ".internal.alerts-stack.alerts-default-000001",
+      ".internal.alerts-observability.metrics.alerts-default-000001",
+      ".kibana_8.19.15_001",
+      ".kibana_alerting_cases_8.19.15_001",
+      ".internal.alerts-default.alerts-default-000001",
+      ".slo-observability.summary-v3.5",
+      ".ds-logs-mytest-default-default-2026.05.27-000002",
+      ".internal.alerts-security.alerts-default-000001",
+      ".kibana_ingest_8.19.15_001",
+      ".kibana_task_manager_8.19.15_001",
+      ".security-tokens-7",
+      ".ds-logs-mytest-default-default-2026.05.27-000001",
+      ".kibana_analytics_8.19.15_001",
+      ".internal.alerts-ml.anomaly-detection.alerts-default-000001",
+      ".internal.alerts-observability.threshold.alerts-default-000001"
+    ]
+  }
+]
+
+
+── STEP 5: Identify backing indices & wait for ILM deletion ──
+
+Initial backing index list:
+health status index                                     uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-2026.05.28-000005 fhAxYvShQyqKBhfa1gqoVg   1   1          0            0       227b           227b         227b
+yellow open   .ds-logs-mytest-default-2026.05.28-000003 adUPcscBQV6xFSWPi6I9Yw   1   1          1            0      4.4kb          4.4kb        4.4kb
+
+Polling every 10s — waiting for 000001 and 000002 to be deleted by ILM...
+
+[03:09:25] --- poll ---
+[03:09:25] Backing indices:
+health status index                                     uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-2026.05.28-000005 fhAxYvShQyqKBhfa1gqoVg   1   1          0            0       227b           227b         227b
+yellow open   .ds-logs-mytest-default-2026.05.28-000003 adUPcscBQV6xFSWPi6I9Yw   1   1          1            0      4.4kb          4.4kb        4.4kb
+[03:09:25] ILM snapshot count: 2
+[03:09:25] 000001 HTTP status: 404
+[03:09:25] 000001 deleted — ILM delete phase complete.
+
+── STEP 5 (continued): Full state after ILM deletion ──
+[03:09:47] Status of 000001:
+404
+[03:09:47] Status of 000002:
+404
+[03:09:47] All current indices (.ds-logs-mytest-*):
+health status index                                     uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-2026.05.28-000005 fhAxYvShQyqKBhfa1gqoVg   1   1          0            0       227b           227b         227b
+
+[03:09:47] All snapshots (checking ILM and SLM counts):
+[
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-wugdc3sorwicftfjupusrg",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779937681031
+  },
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-gis-wz2cruoldbf5gxynqg",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779937712652
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779937720455
+  },
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-dlkdod7vsmy_kpda5e1aow",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779937741467
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779937750472
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw",
+    "state": "SUCCESS",
+    "start_time_in_millis": 1779937780290
+  }
+]
+
+
+Waiting for ILM to delete its own searchable snapshots (delete_searchable_snapshot: true)...
+[03:10:41] ILM snapshot count: 3  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:10:51] ILM snapshot count: 3  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:11:02] ILM snapshot count: 3  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:11:12] ILM snapshot count: 3  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:11:23] ILM snapshot count: 3  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:11:33] ILM snapshot count: 3  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000001-approach_a_ds_policy-yekvjzhbqui_sv7nhmqotq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:11:44] ILM snapshot count: 2  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:11:54] ILM snapshot count: 2  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000002-approach_a_ds_policy-zblbq9kqsa6rhic9pa3uzq",
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:12:05] ILM snapshot count: 1  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:12:15] ILM snapshot count: 1  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:12:26] ILM snapshot count: 1  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:12:36] ILM snapshot count: 1  snapshots: [
+  "2026.05.28-.ds-logs-mytest-default-2026.05.28-000003-approach_a_ds_policy-tzx1mnmatxqzopyb1avcjw"
+]
+[03:12:47] ILM snapshot count: 0  snapshots: []
+[03:12:47] All ILM snapshots deleted — delete_searchable_snapshot: true confirmed.
+
+── STEP 6: Restore from SLM snapshot ──
+
+Confirmed state:
+  000001 status: 404
+  000002 status: 404
+  ILM snapshot count: 0
+  SLM snapshot count: 3
+
+Inspecting oldest SLM snapshot (snapshot 1) for 000001:
+[
+  ".ds-logs-mytest-default-2026.05.28-000001"
+]
+
+Inspecting second SLM snapshot (snapshot 2) for 000002:
+[
+  ".ds-logs-mytest-default-2026.05.28-000001",
+  ".ds-logs-mytest-default-2026.05.28-000002"
+]
+
+
+Restoring 000001 from SLM snapshot 1 (approach-a-slm-backup-2026.05.28-wugdc3sorwicftfjupusrg):
+{"accepted":true}
+Restoring 000002 from SLM snapshot 2 (approach-a-slm-backup-2026.05.28-gis-wz2cruoldbf5gxynqg):
+{"accepted":true}
+Restore status:
+health status index uuid pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+
+Restore recovery status:
+health status index uuid pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+
+Checking recovery progress:
+index shard time type stage source_host source_node target_host target_node repository snapshot files files_recovered files_percent files_total bytes bytes_recovered bytes_percent bytes_total translog_ops translog_ops_recovered translog_ops_percent
+
+All indices matching restored-slm-:
+
+Check all indices to see restored indices:
+Checking with expand_wildcards=all (for hidden indices):
+health status index                                              uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   restored-slm-logs-mytest-default-2026.05.28-000001 -mQqvYCfRmKAULoPhBisiA   1   1          1            0      4.4kb          4.4kb        4.4kb
+yellow open   restored-slm-logs-mytest-default-2026.05.28-000002 sqcAFB2cRTeMuchbloIVHg   1   1          1            0      4.4kb          4.4kb        4.4kb
+
+ILM explain for restored-slm indices:
+
+
+── STEP 7: Unhide and query SLM-restored indices ──
+
+Unhiding restored-slm-logs-mytest-default-2026.05.28-000001:
+{"acknowledged":true}
+Unhiding restored-slm-logs-mytest-default-2026.05.28-000002:
+{"acknowledged":true}
+Query restored-slm-* (expect both docs):
+{
+  "total": 2,
+  "hits": [
+    {
+      "index": "restored-slm-logs-mytest-default-2026.05.28-000001",
+      "message": "Log event 1 in backing index 1",
+      "timestamp": "2026-05-28T10:00:00Z"
+    },
+    {
+      "index": "restored-slm-logs-mytest-default-2026.05.28-000002",
+      "message": "Log event 2 in backing index 2",
+      "timestamp": "2026-05-28T10:05:00Z"
+    }
+  ]
+}
+
+
+── STEP 8: Snapshot inventory (cleanup reference) ──
+
+All snapshots remaining (ILM: 0, SLM: 3):
+[
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-wugdc3sorwicftfjupusrg",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-gis-wz2cruoldbf5gxynqg",
+    "state": "SUCCESS"
+  },
+  {
+    "snapshot": "approach-a-slm-backup-2026.05.28-dlkdod7vsmy_kpda5e1aow",
+    "state": "SUCCESS"
+  }
+]
+
+-- Cleanup commands (run when ready) --
+-- DELETE _snapshot/found-snapshots/approach-a-slm-backup-2026.05.28-wugdc3sorwicftfjupusrg
+-- DELETE _snapshot/found-snapshots/approach-a-slm-backup-2026.05.28-gis-wz2cruoldbf5gxynqg
+-- DELETE _snapshot/found-snapshots/approach-a-slm-backup-2026.05.28-dlkdod7vsmy_kpda5e1aow
+
+
+======================================================================
+RUN STOPPED — completed through Step 8 at 03:14:35
+Stopped before Step 9 (cleanup) as requested.
+Cluster state: restored indices present, SLM policy and snapshots active.
+Run cleanup when ready.
+======================================================================

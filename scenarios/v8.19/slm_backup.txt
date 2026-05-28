@@ -1,0 +1,346 @@
+// =====================================================================
+// Approach A: Data Stream Test Procedure (For Kibana Dev Tools)
+// Target version: Elasticsearch / Elastic Cloud  v8.19
+// Variant: SLM as a reliable backup — positive path
+// =====================================================================
+//
+// PURPOSE OF THIS VARIANT
+// ========================
+// This scenario tests the POSITIVE SLM case: verifying that a manually
+// triggered SLM snapshot can reliably restore deleted backing indices
+// even after:
+//   - ILM has moved the index through the Frozen tier, AND
+//   - ILM has deleted the index TOGETHER WITH its own searchable snapshot
+//     (delete_searchable_snapshot: true)
+//
+// The two conditions required for success:
+//   1. The SLM snapshot must be taken WHILE the backing index still
+//      exists on the cluster (hot tier — before ILM rolls it over and
+//      the delete phase fires ~3 minutes later).
+//   2. SLM retention must outlive the ILM delete phase.
+//
+// In this scenario, ILM is configured with:
+//   "delete_searchable_snapshot": true
+// ILM will delete its own searchable snapshot when it deletes the index.
+// The SLM snapshot is the SOLE long-term recovery mechanism — this
+// proves SLM works as a reliable backup when the snapshot is taken early
+// enough and retention is set correctly.
+//
+// Contrast with scenarios/v8.19/slm.txt, which demonstrates the NEGATIVE
+// case (SLM unreliability when max_count rotation removes the needed snapshot).
+//
+// ⚠️  v8.19 vs v9.2+ DIFFERENCE — NO fm-clone step
+// In v9.2+, ILM creates a temporary "fm-clone-<uuid>-" copy of the
+// backing index, force-merges THAT clone, and then snapshots the clone.
+// In v8.x (including v8.19), ILM performs the force merge directly on
+// the original backing index and snapshots it under its original name.
+// Therefore the ILM snapshot contains:
+//   .ds-logs-mytest-default-2026.05.27-000001
+// (no "fm-clone-..." prefix).
+//
+// RESOURCE NAMES
+// ==============
+// Data stream        : logs-mytest-default
+// ILM policy         : approach_a_ds_policy
+// Index template     : approach_a_ds_template
+// SLM policy         : approach_a_slm_backup_policy
+// SLM restore prefix : restored-slm-
+
+// ---------------------------------------------------------------------
+// Step 1: Preparation (Shorten ILM poll interval)
+// ---------------------------------------------------------------------
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": "10s"
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2: Create ILM policy
+// ---------------------------------------------------------------------
+// Policy triggers rollover at 1 document, moves to Frozen,
+// and deletes the backing index after 3 minutes.
+//
+// ⚠️  KEY DIFFERENCE FROM base.txt:
+//   "delete_searchable_snapshot": true
+// ILM will delete its own searchable snapshot when it deletes the index.
+// This leaves the SLM snapshot as the ONLY recovery mechanism —
+// proving SLM works when configured correctly.
+PUT _ilm/policy/approach_a_ds_policy
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "actions": {
+          "rollover": { "max_docs": 1 }
+        }
+      },
+      "frozen": {
+        "min_age": "0m",
+        "actions": {
+          "searchable_snapshot": {
+            "snapshot_repository": "found-snapshots"
+          }
+        }
+      },
+      "delete": {
+        "min_age": "3m",
+        "actions": {
+          "delete": {
+            "delete_searchable_snapshot": true
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2.5: Create SLM policy
+// ---------------------------------------------------------------------
+// Schedule: every 15 minutes — provides a regular automatic cadence.
+// We also trigger it manually at critical moments below.
+//
+// Retention: expire_after: 3d
+//   Snapshots are retained for 3 days — far longer than the ILM delete
+//   phase (~3 minutes). This is what makes SLM a reliable long-term copy.
+//
+// No max_count — snapshots are kept until they expire naturally.
+//
+// min_count: 1 — always keep at least 1 snapshot even if all have expired.
+//
+// partial: true — allows the snapshot to include frozen searchable
+// snapshot mounts if they exist at execution time.
+PUT _slm/policy/approach_a_slm_backup_policy
+{
+  "name": "<approach-a-slm-backup-{now/d}>",
+  "schedule": "0 0/15 * * * ?",
+  "repository": "found-snapshots",
+  "config": {
+    "indices": "*",
+    "include_global_state": false,
+    "partial": true
+  },
+  "retention": {
+    "expire_after": "3d",
+    "min_count": 1
+  }
+}
+
+// Verify the policy was created:
+GET _slm/policy/approach_a_slm_backup_policy?human
+
+// ---------------------------------------------------------------------
+// Step 3: Create Index Template for Data Streams
+// ---------------------------------------------------------------------
+// Notice the "data_stream": { } block. This tells Elasticsearch to
+// treat any index matching "logs-mytest-*" as a Data Stream.
+// IMPORTANT: "priority": 200 is required to outrank the built-in "logs"
+// template (priority: 100, pattern: logs-*-*) which would otherwise
+// capture this data stream and apply the wrong ILM policy.
+PUT _index_template/approach_a_ds_template
+{
+  "index_patterns": ["logs-mytest-*"],
+  "priority": 200,
+  "data_stream": { },
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "approach_a_ds_policy"
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 4: Ingestion & SLM Snapshots (Creating backing indices)
+// ---------------------------------------------------------------------
+// IMPORTANT SEQUENCE for each document:
+//   1. Ingest the document (backing index created / written to).
+//   2. Execute SLM immediately — BEFORE ILM rolls over.
+//      Taking the snapshot while the index is still in the hot tier
+//      guarantees the SLM snapshot stores the bare .ds-... index name,
+//      not a partial-... frozen mount name.
+//   3. Wait for ILM to roll over (creates the next backing index).
+
+// --- 4.1 Ingest Doc 1 (Goes into backing index 000001) ---
+POST logs-mytest-default/_doc
+{
+  "@timestamp": "2026-05-27T10:00:00Z",
+  "message": "Log event 1 in backing index 1"
+}
+
+// Execute SLM snapshot #1 immediately — captures 000001 while HOT.
+POST _slm/policy/approach_a_slm_backup_policy/_execute
+
+// Confirm SLM snapshot 1 completed (look for last_success.snapshot_name):
+GET _slm/policy/approach_a_slm_backup_policy?human
+
+// WAIT ~15 SECONDS for ILM to evaluate the max_docs: 1 condition
+// and automatically roll over to a new backing index.
+
+// --- 4.2 Ingest Doc 2 (Goes into backing index 000002) ---
+POST logs-mytest-default/_doc
+{
+  "@timestamp": "2026-05-27T10:05:00Z",
+  "message": "Log event 2 in backing index 2"
+}
+
+// Execute SLM snapshot #2 — captures 000002 while HOT
+// (and 000001, which may now be in frozen transition).
+POST _slm/policy/approach_a_slm_backup_policy/_execute
+
+// Confirm SLM snapshot 2 completed:
+GET _slm/policy/approach_a_slm_backup_policy?human
+
+// WAIT ~15 SECONDS for the next ILM rollover.
+
+// --- 4.3 Ingest Doc 3 (Goes into backing index 000003) ---
+POST logs-mytest-default/_doc
+{
+  "@timestamp": "2026-05-27T10:10:00Z",
+  "message": "Log event 3 in backing index 3"
+}
+
+// Execute SLM snapshot #3 — captures 000003 while HOT.
+POST _slm/policy/approach_a_slm_backup_policy/_execute
+
+// Confirm SLM snapshot 3 completed:
+GET _slm/policy/approach_a_slm_backup_policy?human
+
+// Verify all 3 SLM snapshots are present:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// ---------------------------------------------------------------------
+// Step 5: Identify Backing Indices & Wait for ILM Deletion
+// ---------------------------------------------------------------------
+// Check the actual names of the hidden backing indices.
+// They will look like: .ds-logs-mytest-default-2026.05.27-000001
+GET _cat/indices/.ds-logs-mytest-*?v
+
+// Poll until backing index 000001 disappears (ILM delete phase fires
+// ~3 minutes after rollover). With delete_searchable_snapshot: true,
+// ILM also deletes its own searchable snapshot at this point.
+GET .ds-logs-mytest-default-2026.05.27-000001
+
+// After backing indices are deleted, confirm the ILM snapshots are also gone.
+// Only the SLM snapshots (approach-a-slm-backup-*) should remain:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// ✅ EXPECTED STATE AFTER DELETION:
+//   - .ds-logs-mytest-default-2026.05.27-000001  →  404 (ILM deleted)
+//   - .ds-logs-mytest-default-2026.05.27-000002  →  404 (ILM deleted)
+//   - ILM snapshots (date-prefixed names)         →  GONE (delete_searchable_snapshot: true)
+//   - SLM snapshots (approach-a-slm-backup-*)     →  STILL PRESENT (3-day retention)
+
+// ---------------------------------------------------------------------
+// Step 6: Restore from SLM Snapshot
+// ---------------------------------------------------------------------
+// The ILM snapshots are gone. The SLM snapshots are the only copy.
+// Restore 000001 and 000002 from the SLM snapshots taken in Step 4.
+
+// ℹ️  v8.19 — Index names inside SLM snapshots:
+// If the index was HOT when the SLM snapshot was taken (as in this test),
+// it is stored under its original name:
+//   .ds-logs-mytest-default-2026.05.27-000001
+// If it was already in the FROZEN tier (partial-... mount) when
+// snapshotted, it would be stored as:
+//   partial-.ds-logs-mytest-default-2026.05.27-000001
+// Because we ran _execute before each rollover (Step 4), the hot-tier
+// name (.ds-...) is expected here.
+
+// 1. List all snapshots — identify the SLM snapshots by their names
+//    (approach-a-slm-backup-<date>-<uuid>):
+GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
+
+// 2. Inspect the OLDEST SLM snapshot to confirm it contains 000001:
+// GET _snapshot/found-snapshots/<oldest_slm_backup_snapshot>
+// Look for "indices": [".ds-logs-mytest-default-2026.05.27-000001"]
+
+// 3. Restore 000001 from the oldest SLM snapshot:
+POST _snapshot/found-snapshots/<oldest_slm_backup_snapshot>/_restore
+{
+  "indices": ".ds-logs-mytest-default-2026.05.27-000001",
+  "rename_pattern": "\\.ds-(.+)",
+  "rename_replacement": "restored-slm-$1",
+  "index_settings": {
+    "index.lifecycle.name": null,
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}
+
+// 4. Inspect the SECOND SLM snapshot to confirm it contains 000002:
+// GET _snapshot/found-snapshots/<second_slm_backup_snapshot>
+// Look for "indices": [..., ".ds-logs-mytest-default-2026.05.27-000002"]
+
+// 5. Restore 000002 from the second SLM snapshot:
+POST _snapshot/found-snapshots/<second_slm_backup_snapshot>/_restore
+{
+  "indices": ".ds-logs-mytest-default-2026.05.27-000002",
+  "rename_pattern": "\\.ds-(.+)",
+  "rename_replacement": "restored-slm-$1",
+  "index_settings": {
+    "index.lifecycle.name": null,
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}
+
+// Check restore status for both indices:
+GET _cat/indices/restored-slm-*?v
+
+// ---------------------------------------------------------------------
+// Step 7: Query the SLM-Restored Indices
+// ---------------------------------------------------------------------
+// ⚠️  IMPORTANT — Restored indices inherit index.hidden = true from the
+// backing index source. You must set it to false before wildcard searches work.
+PUT restored-slm-logs-mytest-default-2026.05.27-000001/_settings
+{ "index": { "hidden": false } }
+
+PUT restored-slm-logs-mytest-default-2026.05.27-000002/_settings
+{ "index": { "hidden": false } }
+
+// Query both SLM-restored indices — should return docs 1 and 2:
+GET restored-slm-logs-mytest-*/_search
+
+// ✅ SUCCESS: Both documents returned even though:
+//   - The Frozen tier is gone (ILM deleted the backing indices)
+//   - The ILM searchable snapshots are deleted (delete_searchable_snapshot: true)
+//   - The SLM snapshot — taken before rollover while each index was HOT —
+//     is the sole recovery source, and it worked.
+
+// ---------------------------------------------------------------------
+// Step 8: Cleanup Snapshots
+// ---------------------------------------------------------------------
+// [BASH SCRIPT USAGE]: Run `./scripts/v8.19/cleanup_old_snapshots.sh`
+// to delete ILM snapshots by age. (ILM snapshots were already deleted in
+// this scenario, but the script is safe to run as a verification step.)
+
+// [MANUAL DEV TOOLS EQUIVALENT]:
+// List snapshots to find the names of the SLM snapshots to delete:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// Delete each SLM backup snapshot created during this test:
+// DELETE _snapshot/found-snapshots/<slm_backup_snapshot_1>
+// DELETE _snapshot/found-snapshots/<slm_backup_snapshot_2>
+// DELETE _snapshot/found-snapshots/<slm_backup_snapshot_3>
+
+// ---------------------------------------------------------------------
+// Step 9: Environment Cleanup
+// ---------------------------------------------------------------------
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": null
+  }
+}
+
+// Delete the SLM policy:
+DELETE _slm/policy/approach_a_slm_backup_policy
+
+// Delete the ILM policy and index template:
+DELETE _ilm/policy/approach_a_ds_policy
+DELETE _index_template/approach_a_ds_template
+
+// Delete the data stream (removes remaining active backing indices)
+// and all SLM-restored indices:
+DELETE _data_stream/logs-mytest-default
+DELETE restored-slm-logs-mytest-*

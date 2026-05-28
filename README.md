@@ -1,74 +1,18 @@
-# Elasticsearch ILM Restore Tests
+# Elasticsearch ILM Behaviour Tests
 
-A test suite for verifying **ILM (Index Lifecycle Management) snapshot restore** behaviour on Elastic Cloud deployments — specifically, recovering a deleted frozen-tier backing index from the snapshot that ILM preserves before deletion.
+A test suite for verifying **ILM (Index Lifecycle Management)** behaviour on Elastic Cloud deployments — covering phase transitions, snapshot lifecycle, SLM integration, tiered storage, and operational pitfalls.
 
-Tests cover multiple Elasticsearch versions and explore both the correct restore path and common operational pitfalls.
+Tests cover multiple Elasticsearch versions. Each scenario is a self-contained end-to-end flow: from policy creation and data ingestion through phase transitions to deletion. Manually restoring a deleted backing index from its ILM snapshot is supported as an optional step for users who need to verify recoverability, but it is not the primary focus of most scenarios.
 
----
-
-## The Problem
-
-When ILM transitions a data-stream backing index through the frozen tier and eventually deletes it, it first takes a searchable-snapshot. That snapshot remains in the cluster's snapshot repository (`found-snapshots`) and can be used to recover the data.
-
-**But the restore workflow differs between Elasticsearch versions:**
-
-| | v8.x | v9.2+ |
-|---|---|---|
-| Snapshot stores | raw `.ds-...` index name | `fm-clone-<uuid>-.ds-...` clone name |
-| Snapshot naming | `YYYY.MM.DD-<index>-<policy>-<uuid>` | `ilm-searchable-snapshot-<uuid>` |
-| Restore rename pattern | `"\\.ds-(.+)"` | `".*\\.ds-(.+)"` |
-| `index.hidden` after restore | must set to `false` | no issue |
-
-See [`docs/version-differences.md`](docs/version-differences.md) for the full comparison.
-
----
-
-## What's in this repo
-
-```
-scenarios/         Kibana Dev Tools command sequences (paste into Dev Tools console)
-  v8.19/
-    base.txt           Base ILM restore test
-    slm.txt            Extended: demonstrates SLM snapshot unreliability
-    slm_waitfor.txt    Extended: demonstrates the wait_for_snapshot stall trap
-  v9.4/
-    base.txt           Base ILM restore test for v9.x
-    slm.txt            SLM variant for v9.x
-
-scripts/           Shell utilities (require curl and jq)
-  v8.19/
-    restore_index.sh          Restore one backing index from its ILM snapshot
-    cleanup_old_snapshots.sh  Delete ILM snapshots older than N minutes
-    check_snapshot_datasize.sh  Audit incremental/total storage per snapshot
-  v9.4/
-    restore_index.sh
-    cleanup_old_snapshots.sh
-    check_snapshot_datasize.sh
-
-docs/
-  version-differences.md    Side-by-side v8.19 vs v9.x behaviour table
-  findings/
-    v8.19-base.md           Test results — base restore scenario
-    v8.19-slm-waitfor.md    Test results — wait_for_snapshot trap
-    v9.4-base.md            Test results — v9.4 base restore
-  slides/
-    data_lifecycle_slm_v8.19.html  Presentation: data lifecycle & SLM pitfalls
-
-runs/              Raw captured output from completed test runs
-  v8.19/
-    run1.txt, run2.txt, run3.txt
-    slm.txt, slm_waitfor.txt
-  v9.4/
-    run1.txt
-```
+This repo is designed to be driven entirely through **Claude Code**. Two slash commands handle all test operations; no direct API calls or manual script execution are needed.
 
 ---
 
 ## Prerequisites
 
-- `curl` and `jq` installed
-- An Elastic Cloud deployment (ESS or ECE) running the version you want to test
-- An API key with at minimum: `manage`, `monitor`, `manage_ilm`, `manage_slm`, `manage_index_templates` cluster privileges and `all` index privileges on `logs-mytest-*`
+- [Claude Code](https://claude.ai/code) with this repo open as the working directory
+- An Elastic Cloud deployment running the version you want to test (dedicated test cluster — **not production**)
+- An API key with: `manage`, `monitor`, `manage_ilm`, `manage_slm`, `manage_index_templates` cluster privileges and `all` index privileges on `logs-mytest-*`
 
 ---
 
@@ -78,62 +22,89 @@ runs/              Raw captured output from completed test runs
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in ES_URL and API_KEY
+# Edit .env — fill in ES_URL and API_KEY for your test cluster
 ```
 
-### 2. Verify connectivity
+### 2. Create a new scenario
 
-```bash
-source .env
-curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
-  jq '{version: .version.number, cluster_name: .cluster_name}'
+To create a scenario for a new version or a new test variant, type:
+
+```
+/new-ilm-scenario
 ```
 
-### 3. Run the scenario
+Claude will ask you for the version, variant type, timing, and namespace, then generate the scenario file at `scenarios/<version>/<variant>.txt` and scaffold any missing scripts.
 
-Open Kibana → Dev Tools, paste the contents of `scenarios/v8.19/base.txt`, and execute each step in order.
+### 3. Run a test scenario
 
-For an automated run (writes output to file), Claude Code can drive the scenario end-to-end — see `CLAUDE.md`.
+In Claude Code, type:
 
-### 4. Restore a deleted backing index
-
-```bash
-./scripts/v8.19/restore_index.sh .ds-logs-mytest-v8-default-2026.05.27-000001
+```
+/run-ilm-test
 ```
 
-### 5. Clean up test snapshots
+Claude will:
+1. Show the target cluster URL and ask you to confirm it is a dedicated test cluster
+2. Ask which version and scenario variant to run
+3. Check for leftover resources from previous runs
+4. Execute the scenario end-to-end, writing timestamped output to `runs/<version>/<variant>.txt`
+5. Write a findings summary to `docs/findings/<version>-<variant>.md`
+6. Stop and wait for you to say **"cleanup"** before deleting anything
 
-```bash
-./scripts/v8.19/cleanup_old_snapshots.sh 10   # delete snapshots older than 10 min
+Scenarios that include a restore step will execute it as part of the flow. For scenarios that don't, manual restore is available separately via the scripts in `scripts/<version>/` if needed.
+
+### 4. Clean up after a test
+
+Tell Claude:
+
 ```
+cleanup
+```
+
+Claude will delete all resources created during the run: data stream, restored indices, ILM/SLM policies, index template, and snapshots. Cleanup never runs automatically.
 
 ---
 
-## Key findings
+## What's in this repo
 
-### ✅ ILM restore works reliably
+```
+scenarios/         Kibana Dev Tools command sequences
+  v8.19/
+    base.txt              Base ILM restore test
+    slm.txt               Extended: demonstrates SLM snapshot unreliability
+    slm_waitfor.txt       Extended: demonstrates the wait_for_snapshot stall trap
+    slm_backup.txt        Positive SLM path: SLM as a reliable sole backup
+    hot_cold_frozen.txt   Hot → Cold → Frozen tiered migration
+    slm_storage_cost.txt  SLM snapshot storage cost analysis
+  v9.4/
+    base.txt              Base ILM restore test for v9.x
+    slm.txt               SLM variant for v9.x
 
-After ILM deletes a frozen-tier backing index, the ILM-managed snapshot can be used to restore it. The restore process is version-dependent (see above) but consistently reproducible.
+scripts/           Shell utilities (used internally by /run-ilm-test)
+  v8.19/
+    restore_index.sh          Restore one backing index from its ILM snapshot
+    cleanup_old_snapshots.sh  Delete ILM snapshots older than N minutes
+    check_snapshot_datasize.sh  Audit incremental/total storage per snapshot
+  v9.4/
+    (same scripts, v9.4-aware)
 
-### ⚠️ SLM is not a reliable backup for frozen-tier indices
+docs/
+  version-differences.md    Side-by-side v8.19 vs v9.x behaviour reference
+  findings/
+    v8.19-base.md           Results — base restore scenario
+    v8.19-slm-waitfor.md    Results — wait_for_snapshot stall trap
+    v8.19-slm-backup.md     Results — SLM as a reliable backup (positive path)
+    v8.19-slm-storage-cost.md  Results — SLM snapshot storage cost
+    v8.19-hot-cold-frozen.md   Results — hot/cold/frozen tiered migration
+    v9.4-base.md            Results — v9.4 base restore
 
-SLM snapshots are taken on a schedule, not triggered by ILM events. There is a window — potentially hours — between when ILM deletes the live index and when the next SLM snapshot runs. During that window, the only copy of the data is the ILM snapshot.
-
-### 🚫 `wait_for_snapshot` in a delete action stalls ILM permanently
-
-If you configure an ILM delete action with `wait_for_snapshot` pointing to a policy that doesn't match (or hasn't run yet), ILM enters an `ERROR` state and the data stream stops rolling over. The cluster requires manual intervention to recover.
-
-Full details: [`docs/findings/v8.19-slm-waitfor.md`](docs/findings/v8.19-slm-waitfor.md)
-
----
-
-## Adding a new version
-
-1. Create `.env_v<X.Y>` from `.env.example`
-2. Copy the closest existing scenario to `scenarios/v<X.Y>/base.txt` and adjust for version-specific behaviour (see `docs/version-differences.md`)
-3. Copy and update scripts to `scripts/v<X.Y>/`
-4. Run the scenario and save output to `runs/v<X.Y>/run1.txt`
-5. Write a summary to `docs/findings/v<X.Y>-base.md`
+runs/              Raw timestamped output from completed test runs
+  v8.19/
+    run1.txt, run2.txt, run3.txt
+    slm.txt, slm_waitfor.txt, slm_backup.txt, ...
+  v9.4/
+    run1.txt
+```
 
 ---
 
