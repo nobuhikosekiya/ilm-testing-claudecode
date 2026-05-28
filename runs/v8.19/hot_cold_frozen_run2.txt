@@ -1,0 +1,344 @@
+======================================================================
+v8.19 hot_cold_frozen Test Scenario — 2026-05-28T00:38:16Z
+======================================================================
+
+Scenario file : scenarios/v8.19/hot_cold_frozen.txt
+Output file   : runs/v8.19/hot_cold_frozen_run2.txt
+Cluster       : nobu-ilm-083e6e (v8.19.15)
+
+── STEP 1: Set ILM poll interval to 10s ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+── STEP 2: Create ILM policy approach_a_default_policy ──
+{"acknowledged":true}
+── STEP 2.5: Create SLM policy approach_a_default_slm_policy ──
+{"acknowledged":true}
+── Verify SLM policy ──
+{
+  "next_execution": null,
+  "schedule": "0 */15 * * * ?"
+}
+
+── STEP 3: Create index template approach_a_default_template (priority 250) ──
+{"acknowledged":true}
+── STEP 4.1: Ingest Doc 1 → backing index 000001 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000001","_id":"A94FbJ4BaFODm9o7KkjR","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+── STEP 4.2: Ingest Doc 2 → backing index 000002 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000002","_id":"EN4FbJ4BaFODm9o7ZUjv","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+── STEP 4.3: Ingest Doc 3 → backing index 000003 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000003","_id":"Id4FbJ4BaFODm9o7oUgY","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+── STEP 4.4: Ingest Doc 4 → backing index 000004 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000004","_id":"Mt4FbJ4BaFODm9o73Eg3","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+── STEP 4.5: Ingest Doc 5 → backing index 000005 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000005","_id":"Q94GbJ4BaFODm9o7F0hX","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+── STEP 4: Post-ingestion — List backing indices ──
+index                                             health status docs.count store.size
+.ds-logs-mytest-default-default-2026.05.28-000001 green  open            1      4.4kb
+.ds-logs-mytest-default-default-2026.05.28-000002 green  open            1      4.4kb
+.ds-logs-mytest-default-default-2026.05.28-000003 green  open            1      4.4kb
+.ds-logs-mytest-default-default-2026.05.28-000004 green  open            1      4.4kb
+.ds-logs-mytest-default-default-2026.05.28-000005 green  open            1      4.4kb
+.ds-logs-mytest-default-default-2026.05.28-000006 yellow open            0       227b
+
+── CHECKPOINT A: Query all tiers (HOT phase) ──
+{
+  "hits_total": 5,
+  "docs": [
+    "Log event 1 — backing index 000001",
+    "Log event 2 — backing index 000002",
+    "Log event 3 — backing index 000003",
+    "Log event 4 — backing index 000004",
+    "Log event 5 — backing index 000005"
+  ]
+}
+
+── CHECKPOINT A: Count ──
+{
+  "count": 5
+}
+
+── CHECKPOINT A: ILM state of 000001 ──
+{
+  "phase": "cold",
+  "action": "complete",
+  "step": "complete",
+  "age": "1.38m"
+}
+
+── STEP 5.3: Cold phase — ILM state of all backing indices ──
+  000001: cold/complete/complete  age=1.63m
+  000002: cold/complete/complete  age=1.29m
+  000003: cold/complete/complete  age=1.13m
+  000004: cold/complete/complete  age=48.08s
+  000005: cold/complete/complete  age=38.11s
+
+── ✅ CHECKPOINT B — COLD TIER: Query via data stream ──
+{
+  "hits_total": 5,
+  "docs": [
+    "Log event 1 — backing index 000001",
+    "Log event 2 — backing index 000002",
+    "Log event 3 — backing index 000003",
+    "Log event 4 — backing index 000004",
+    "Log event 5 — backing index 000005"
+  ]
+}
+
+── CHECKPOINT B: Count ──
+{
+  "count": 5
+}
+
+── STEP 5.4: Polling cold → frozen transition ──
+[00:40:50] 000001: cold/complete/complete age=1.81m | partial_mounts=0
+0
+[00:41:00] 000001: cold/complete/complete age=1.98m | partial_mounts=0
+0
+[00:41:11] 000001: cold/complete/complete age=2.15m | partial_mounts=0
+0
+[00:41:21] 000001: cold/complete/complete age=2.32m | partial_mounts=0
+0
+[00:41:31] 000001: cold/complete/complete age=2.49m | partial_mounts=0
+0
+[00:41:41] 000001: cold/complete/complete age=2.66m | partial_mounts=0
+0
+[00:41:51] 000001: cold/complete/complete age=2.83m | partial_mounts=0
+0
+[00:42:02] 000001: cold/complete/complete age=3m | partial_mounts=0
+0
+[00:42:12] 000001: frozen/searchable_snapshot/wait-for-shard-history-leases age=3.17m | partial_mounts=0
+0
+[00:42:12] ✅ 000001 reached FROZEN phase — exiting poll.
+── STEP 5.4 (continued): Polling for all 5 partial mounts ──
+[00:42:24] partial_mounts=0
+0 ilm_snapshots=0 000001=frozen/searchable_snapshot/check-ts-end-time-passed
+[00:42:39] partial_mounts=0
+0 ilm_snapshots=0 000001=frozen/searchable_snapshot/segment-count
+[00:42:55] partial_mounts=0
+0 ilm_snapshots=2 000001=
+[00:43:10] partial_mounts=0
+0 ilm_snapshots=2 000001=
+[00:43:25] partial_mounts=0
+0 ilm_snapshots=4 000001=
+[00:43:41] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:43:56] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:44:11] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:44:27] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:44:42] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:44:57] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:45:13] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:45:28] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:45:43] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:45:59] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:46:14] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:46:30] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:46:45] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:47:00] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:47:16] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:47:31] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:47:46] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:48:02] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:48:17] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:48:33] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:48:48] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:49:03] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:49:19] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:49:34] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:49:49] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:50:05] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:50:20] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:50:36] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:50:51] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:51:06] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:51:22] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:51:37] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:51:53] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:52:08] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:52:23] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:52:39] partial_mounts=0
+0 ilm_snapshots=5 000001=
+[00:52:54] partial_mounts=0
+0 ilm_snapshots=5 000001=
+
+── STEP 5.4 (result): All 5 partial mounts confirmed present ──
+NOTE: poll loop exited manually; mounts confirmed via direct _cat/indices query
+[00:53:14] partial_mounts=5 ilm_snapshots=5
+
+── Partial mount list ──
+index health status docs.count
+
+── ILM explain via partial mount (000001) ──
+{
+  "phase": "frozen",
+  "action": "complete",
+  "step": "complete",
+  "age": "14.2m"
+}
+
+── ILM snapshots (all 5) ──
+[
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000001-approach_a_default_policy-rbzpadkcszekazosqqoriw",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000001"
+    ]
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000002-approach_a_default_policy-6duyvhlcthc-p6pkas3dbq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000002"
+    ]
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000003-approach_a_default_policy-aiipo8rfrmivzxdxddanaq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000003"
+    ]
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000004-approach_a_default_policy-heieljhrsusbn6szv32nkw",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000004"
+    ]
+  },
+  {
+    "snapshot": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000005-approach_a_default_policy-gqswzxnlrpobnq_ecv1ebq",
+    "state": "SUCCESS",
+    "indices": [
+      ".ds-logs-mytest-default-default-2026.05.28-000005"
+    ]
+  }
+]
+
+── ✅ CHECKPOINT C — FROZEN TIER: Query via data stream ──
+{
+  "hits_total": 5,
+  "docs": [
+    "Log event 1 — backing index 000001",
+    "Log event 2 — backing index 000002",
+    "Log event 3 — backing index 000003",
+    "Log event 4 — backing index 000004",
+    "Log event 5 — backing index 000005"
+  ]
+}
+
+── CHECKPOINT C: Count ──
+{
+  "count": 5
+}
+
+── Data stream backing indices (frozen partial mounts) ──
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000001",
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000002",
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000003",
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000004",
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000005",
+  ".ds-logs-mytest-default-default-2026.05.28-000006"
+]
+
+── STEP 5.5: Shorten delete min_age to 20m (indices are ~14m old) ──
+{"acknowledged":true}
+── STEP 5.5: Polling DELETE phase — watching hit count drop to 0 ──
+[00:53:54] count=5 ilm_snapshots=5 000001=000001
+[00:54:09] count=5 ilm_snapshots=5 000001=000001
+[00:54:24] count=5 ilm_snapshots=5 000001=000001
+[00:54:40] count=5 ilm_snapshots=5 000001=000001
+[00:54:55] count=5 ilm_snapshots=5 000001=000001
+[00:55:11] count=5 ilm_snapshots=5 000001=000001
+[00:55:26] count=5 ilm_snapshots=5 000001=000001
+[00:55:42] count=5 ilm_snapshots=5 000001=000001
+[00:55:57] count=5 ilm_snapshots=5 000001=000001
+[00:56:12] count=5 ilm_snapshots=5 000001=000001
+[00:56:28] count=5 ilm_snapshots=5 000001=000001
+[00:56:43] count=5 ilm_snapshots=5 000001=000001
+[00:56:59] count=5 ilm_snapshots=5 000001=000001
+[00:57:14] count=5 ilm_snapshots=5 000001=000001
+[00:57:29] count=5 ilm_snapshots=5 000001=000001
+[00:57:45] count=5 ilm_snapshots=5 000001=000001
+[00:58:00] count=5 ilm_snapshots=5 000001=000001
+[00:58:16] count=5 ilm_snapshots=5 000001=000001
+[00:58:31] count=5 ilm_snapshots=5 000001=000001
+[00:58:46] count=5 ilm_snapshots=5 000001=000001
+[00:59:02] count=5 ilm_snapshots=5 000001=000001
+[00:59:17] count=5 ilm_snapshots=5 000001=000001
+[00:59:33] count=4 ilm_snapshots=4 000001=gone
+[00:59:48] count=3 ilm_snapshots=3 000001=gone
+[01:00:03] count=3 ilm_snapshots=3 000001=gone
+[01:00:19] count=1 ilm_snapshots=1 000001=gone
+[01:00:35] count=0 ilm_snapshots=0 000001=gone
+[01:00:35] ❌ CHECKPOINT D — Hit count reached 0. Delete phase complete.
+
+── [01:00:45] CHECKPOINT D: Final state after delete phase ──
+--- Search (expect 0 hits) ---
+{
+  "hits_total": 0
+}
+--- Data stream backing indices ---
+[
+  ".ds-logs-mytest-default-default-2026.05.28-000006"
+]
+--- ILM snapshots (expect empty) ---
+[]
+
+── CLEANUP ──
+9.1 Reset ILM poll interval to default (null):
+{"acknowledged":true,"persistent":{},"transient":{}}
+9.2 Delete SLM policy:
+{"acknowledged":true}
+9.3 Delete data stream:
+{"acknowledged":true}
+9.4 Delete ILM policy:
+{"acknowledged":true}
+9.5 Delete index template:
+{"acknowledged":true}
+── Cleanup verification ──
+Data streams:
+0
+ILM policies (approach_a_*):
+[]
+ILM snapshots:
+[]
+
+======================================================================
+RUN COMPLETE — 2026-05-28T01:01:01Z
+Output file: runs/v8.19/hot_cold_frozen_run2.txt
+======================================================================
