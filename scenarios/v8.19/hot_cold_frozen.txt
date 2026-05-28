@@ -276,10 +276,16 @@ GET logs-mytest-default-default/_search
 //      Frozen mount name (v8.19): partial-.ds-logs-mytest-default-default-<date>-000001
 //   3. Removes the cold-tier copy of the backing index.
 //
-// Poll for the partial mount appearing (reliable indicator — the original
-// .ds-... index is deleted when the frozen transition completes, so
-// _ilm/explain on it returns null once frozen):
-GET _cat/indices/partial-.ds-logs-mytest-default-default-*?v&h=index,health,status,docs.count
+// Poll for partial mounts appearing by inspecting the data stream backing
+// indices. Use _data_stream — NOT _cat/indices with a wildcard.
+//
+// ⚠️  _cat/indices/partial-.ds-...*  does NOT return partial mounts.
+//     The wildcard path filter silently returns zero rows even when the
+//     partial mounts exist (confirmed in Run 2, 2026-05-28).
+//     The correct approach is _data_stream, which lists all backing indices
+//     including partial-.ds-... frozen mounts.
+GET _data_stream/logs-mytest-default-default
+// Look for: backing indices with names starting "partial-.ds-..."
 
 // Once the partial mount is visible, check ILM state via the PARTIAL mount:
 GET partial-.ds-logs-mytest-default-default-<date>-000001/_ilm/explain
