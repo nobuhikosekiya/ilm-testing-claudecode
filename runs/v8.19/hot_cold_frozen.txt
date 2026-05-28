@@ -1,0 +1,1216 @@
+======================================================================
+v8.19 hot_cold_frozen Test Scenario — 2026-05-27T23:21:48Z
+======================================================================
+
+Scenario file : scenarios/v8.19/hot_cold_frozen.txt
+Output file   : runs/v8.19/hot_cold_frozen.txt
+Cluster       : nobu-ilm-083e6e (Elastic Cloud, v8.19.15)
+ES version    : 8.19.15
+Restore prefix: restored2- (from scripts/v8.19/restore_index.sh)
+
+
+── STEP 1: Shorten ILM poll interval to 10s ──
+{"error":{"root_cause":[{"type":"security_exception","reason":"action [cluster:admin/settings/update] is unauthorized for API key id [6t61a54BaFODm9o7l0aM] of user [2770367626], this action is granted by the cluster privileges [manage,all]"}],"type":"security_exception","reason":"action [cluster:admin/settings/update] is unauthorized for API key id [6t61a54BaFODm9o7l0aM] of user [2770367626], this action is granted by the cluster privileges [manage,all]"},"status":403}
+
+── STEP 1: Shorten ILM poll interval to 10s ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+
+── STEP 2: Create ILM policy (hot → cold → frozen → delete) ──
+{"acknowledged":true}
+
+── STEP 2.5: Create SLM policy (every 3 minutes, retain 5) ──
+{"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"invalid schedule [0 */3 * * * ?]: schedule would be too frequent, executing more than every [15m]"}],"type":"illegal_argument_exception","reason":"invalid schedule [0 */3 * * * ?]: schedule would be too frequent, executing more than every [15m]"},"status":400}
+── STEP 2.5 verify: GET _slm/policy/approach_a_default_slm_policy ──
+{"error":{"root_cause":[{"type":"resource_not_found_exception","reason":"snapshot lifecycle policy or policies [approach_a_default_slm_policy] not found"}],"type":"resource_not_found_exception","reason":"snapshot lifecycle policy or policies [approach_a_default_slm_policy] not found"},"status":404}
+
+── STEP 2.5: Create SLM policy (every 15 minutes, retain 5) ──
+NOTE: Elastic Cloud minimum SLM interval is 15m; 3m schedule was rejected.
+{"acknowledged":true}
+── STEP 2.5 verify: GET _slm/policy/approach_a_default_slm_policy ──
+{"approach_a_default_slm_policy":{"version":1,"modified_date":"2026-05-27T23:27:48.728Z","modified_date_millis":1779924468728,"policy":{"name":"<approach-a-default-slm-{now/d}>","schedule":"0 */15 * * * ?","repository":"found-snapshots","config":{"indices":"*","include_global_state":false,"partial":true},"retention":{"expire_after":"30d","min_count":1,"max_count":5}},"next_execution":"2026-05-27T23:30:00.000Z","next_execution_millis":1779924600000,"stats":{"policy":"approach_a_default_slm_policy","snapshots_taken":0,"snapshots_failed":0,"snapshots_deleted":0,"snapshot_deletion_failures":0}}}
+
+── STEP 3: Create index template (priority 250) ──
+{"acknowledged":true}
+
+── STEP 4: Ingestion — create 5 backing indices ──
+
+── 4.1 Ingest Doc 1 → backing index 000001 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.27-000001","_id":"8t7Ea54BaFODm9o7aUah","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 15s for ILM rollover...
+
+── 4.2 Ingest Doc 2 → backing index 000002 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.27-000002","_id":"_97Ea54BaFODm9o7pEby","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 15s for ILM rollover...
+
+── 4.3 Ingest Doc 3 → backing index 000003 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.27-000003","_id":"D97Ea54BaFODm9o74Ec0","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 15s for ILM rollover...
+
+── 4.4 Ingest Doc 4 → backing index 000004 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.27-000004","_id":"H97Fa54BaFODm9o7G0er","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 15s for ILM rollover...
+
+── 4.5 Ingest Doc 5 → backing index 000005 ──
+{"_index":".ds-logs-mytest-default-default-2026.05.27-000005","_id":"L97Fa54BaFODm9o7Vkfg","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+Waiting 15s for final rollover → 000006 becomes active...
+
+── STEP 5.1: List all backing indices ──
+index                                             health status docs.count store.size
+.ds-logs-mytest-default-default-2026.05.27-000006 yellow open            0       227b
+.ds-logs-mytest-default-default-2026.05.27-000005 green  open            1      8.9kb
+.ds-logs-mytest-default-default-2026.05.27-000004 green  open            1      8.9kb
+.ds-logs-mytest-default-default-2026.05.27-000003 green  open            1      8.9kb
+.ds-logs-mytest-default-default-2026.05.27-000002 green  open            1      8.9kb
+.ds-logs-mytest-default-default-2026.05.27-000001 green  open            1      8.9kb
+
+── STEP 5.2: ILM explain for 000001 ──
+{
+  "phase": "cold",
+  "action": "migrate",
+  "step": "check-migration",
+  "age": "1.38m"
+}
+
+── CHECKPOINT A: Query all tiers (HOT phase) ──
+{
+  "total": {
+    "value": 5,
+    "relation": "eq"
+  },
+  "hits": [
+    "Log event 1 — backing index 000001",
+    "Log event 2 — backing index 000002",
+    "Log event 3 — backing index 000003",
+    "Log event 4 — backing index 000004",
+    "Log event 5 — backing index 000005"
+  ]
+}
+
+── CHECKPOINT A: Count ──
+{"count":5,"_shards":{"total":6,"successful":6,"skipped":0,"failed":0}}
+
+── STEP 5.3: Polling for COLD phase completion ──
+[23:29:59] 000001: phase=cold action=migrate step=check-migration age=1.6m
+[23:30:09] 000001: phase=cold action=migrate step=check-migration age=1.76m
+[23:30:19] 000001: phase=cold action=migrate step=check-migration age=1.93m
+[23:30:29] 000001: phase=cold action=migrate step=check-migration age=2.1m
+[23:30:39] 000001: phase=cold action=migrate step=check-migration age=2.27m
+[23:30:49] 000001: phase=cold action=migrate step=check-migration age=2.44m
+[23:31:00] 000001: phase=cold action=migrate step=check-migration age=2.61m
+[23:31:10] 000001: phase=cold action=migrate step=check-migration age=2.78m
+[23:31:20] 000001: phase=cold action=migrate step=check-migration age=2.95m
+[23:31:30] 000001: phase=cold action=migrate step=check-migration age=3.12m
+[23:31:40] 000001: phase=cold action=migrate step=check-migration age=3.29m
+[23:31:50] 000001: phase=cold action=migrate step=check-migration age=3.46m
+[23:32:01] 000001: phase=cold action=migrate step=check-migration age=3.63m
+[23:32:11] 000001: phase=cold action=migrate step=check-migration age=3.8m
+[23:32:21] 000001: phase=cold action=migrate step=check-migration age=3.96m
+[23:32:31] 000001: phase=cold action=migrate step=check-migration age=4.13m
+[23:32:41] 000001: phase=cold action=migrate step=check-migration age=4.3m
+[23:32:51] 000001: phase=cold action=migrate step=check-migration age=4.47m
+[23:33:01] 000001: phase=cold action=migrate step=check-migration age=4.64m
+[23:33:12] 000001: phase=cold action=migrate step=check-migration age=4.81m
+[23:33:22] 000001: phase=cold action=migrate step=check-migration age=4.98m
+[23:33:32] 000001: phase=cold action=migrate step=check-migration age=5.15m
+[23:33:42] 000001: phase=cold action=migrate step=check-migration age=5.32m
+[23:33:52] 000001: phase=cold action=migrate step=check-migration age=5.49m
+[23:34:03] 000001: phase=cold action=migrate step=check-migration age=5.66m
+[23:34:13] 000001: phase=cold action=migrate step=check-migration age=5.83m
+[23:34:23] 000001: phase=cold action=migrate step=check-migration age=6m
+[23:34:33] 000001: phase=cold action=migrate step=check-migration age=6.17m
+[23:34:43] 000001: phase=cold action=migrate step=check-migration age=6.34m
+[23:34:53] 000001: phase=cold action=migrate step=check-migration age=6.5m
+[23:35:03] 000001: phase=cold action=migrate step=check-migration age=6.67m
+[23:35:13] 000001: phase=cold action=migrate step=check-migration age=6.84m
+[23:35:24] 000001: phase=cold action=migrate step=check-migration age=7.01m
+[23:35:34] 000001: phase=cold action=migrate step=check-migration age=7.18m
+[23:35:44] 000001: phase=cold action=migrate step=check-migration age=7.35m
+[23:35:54] 000001: phase=cold action=migrate step=check-migration age=7.52m
+[23:36:04] 000001: phase=cold action=migrate step=check-migration age=7.69m
+[23:36:14] 000001: phase=cold action=migrate step=check-migration age=7.86m
+[23:36:24] 000001: phase=cold action=migrate step=check-migration age=8.02m
+[23:36:35] 000001: phase=cold action=migrate step=check-migration age=8.2m
+[23:36:45] 000001: phase=cold action=migrate step=check-migration age=8.36m
+[23:36:55] 000001: phase=cold action=migrate step=check-migration age=8.53m
+[23:37:05] 000001: phase=cold action=migrate step=check-migration age=8.7m
+[23:37:15] 000001: phase=cold action=migrate step=check-migration age=8.87m
+[23:37:25] 000001: phase=cold action=migrate step=check-migration age=9.04m
+[23:37:36] 000001: phase=cold action=migrate step=check-migration age=9.21m
+[23:37:46] 000001: phase=cold action=migrate step=check-migration age=9.38m
+[23:37:56] 000001: phase=cold action=migrate step=check-migration age=9.55m
+[23:38:06] 000001: phase=cold action=migrate step=check-migration age=9.72m
+[23:38:16] 000001: phase=cold action=migrate step=check-migration age=9.89m
+[23:38:26] 000001: phase=cold action=migrate step=check-migration age=10.06m
+[23:38:37] 000001: phase=cold action=migrate step=check-migration age=10.23m
+[23:38:47] 000001: phase=cold action=migrate step=check-migration age=10.4m
+[23:38:57] 000001: phase=cold action=migrate step=check-migration age=10.56m
+[23:39:07] 000001: phase=cold action=migrate step=check-migration age=10.73m
+[23:39:17] 000001: phase=cold action=migrate step=check-migration age=10.9m
+[23:39:27] 000001: phase=cold action=migrate step=check-migration age=11.07m
+[23:39:38] 000001: phase=cold action=migrate step=check-migration age=11.24m
+[23:39:48] 000001: phase=cold action=migrate step=check-migration age=11.41m
+[23:39:58] 000001: phase=cold action=migrate step=check-migration age=11.58m
+
+── STEP 5.3: Polling for COLD phase completion ──
+[23:29:59] 000001: phase=cold action=migrate step=check-migration age=1.6m
+[23:30:09] 000001: phase=cold action=migrate step=check-migration age=1.76m
+[23:30:19] 000001: phase=cold action=migrate step=check-migration age=1.93m
+[23:30:29] 000001: phase=cold action=migrate step=check-migration age=2.1m
+[23:30:39] 000001: phase=cold action=migrate step=check-migration age=2.27m
+[23:30:49] 000001: phase=cold action=migrate step=check-migration age=2.44m
+[23:31:00] 000001: phase=cold action=migrate step=check-migration age=2.61m
+[23:31:10] 000001: phase=cold action=migrate step=check-migration age=2.78m
+[23:31:20] 000001: phase=cold action=migrate step=check-migration age=2.95m
+[23:31:30] 000001: phase=cold action=migrate step=check-migration age=3.12m
+[23:31:40] 000001: phase=cold action=migrate step=check-migration age=3.29m
+[23:31:50] 000001: phase=cold action=migrate step=check-migration age=3.46m
+[23:32:01] 000001: phase=cold action=migrate step=check-migration age=3.63m
+[23:32:11] 000001: phase=cold action=migrate step=check-migration age=3.8m
+[23:32:21] 000001: phase=cold action=migrate step=check-migration age=3.96m
+[23:32:31] 000001: phase=cold action=migrate step=check-migration age=4.13m
+[23:32:41] 000001: phase=cold action=migrate step=check-migration age=4.3m
+[23:32:51] 000001: phase=cold action=migrate step=check-migration age=4.47m
+[23:33:01] 000001: phase=cold action=migrate step=check-migration age=4.64m
+[23:33:12] 000001: phase=cold action=migrate step=check-migration age=4.81m
+[23:33:22] 000001: phase=cold action=migrate step=check-migration age=4.98m
+[23:33:32] 000001: phase=cold action=migrate step=check-migration age=5.15m
+[23:33:42] 000001: phase=cold action=migrate step=check-migration age=5.32m
+[23:33:52] 000001: phase=cold action=migrate step=check-migration age=5.49m
+[23:34:03] 000001: phase=cold action=migrate step=check-migration age=5.66m
+[23:34:13] 000001: phase=cold action=migrate step=check-migration age=5.83m
+[23:34:23] 000001: phase=cold action=migrate step=check-migration age=6m
+[23:34:33] 000001: phase=cold action=migrate step=check-migration age=6.17m
+[23:34:43] 000001: phase=cold action=migrate step=check-migration age=6.34m
+[23:34:53] 000001: phase=cold action=migrate step=check-migration age=6.5m
+[23:35:03] 000001: phase=cold action=migrate step=check-migration age=6.67m
+[23:35:13] 000001: phase=cold action=migrate step=check-migration age=6.84m
+[23:35:24] 000001: phase=cold action=migrate step=check-migration age=7.01m
+[23:35:34] 000001: phase=cold action=migrate step=check-migration age=7.18m
+[23:35:44] 000001: phase=cold action=migrate step=check-migration age=7.35m
+[23:35:54] 000001: phase=cold action=migrate step=check-migration age=7.52m
+[23:36:04] 000001: phase=cold action=migrate step=check-migration age=7.69m
+[23:36:14] 000001: phase=cold action=migrate step=check-migration age=7.86m
+[23:36:24] 000001: phase=cold action=migrate step=check-migration age=8.02m
+[23:36:35] 000001: phase=cold action=migrate step=check-migration age=8.2m
+[23:36:45] 000001: phase=cold action=migrate step=check-migration age=8.36m
+[23:36:55] 000001: phase=cold action=migrate step=check-migration age=8.53m
+[23:37:05] 000001: phase=cold action=migrate step=check-migration age=8.7m
+[23:37:15] 000001: phase=cold action=migrate step=check-migration age=8.87m
+[23:37:25] 000001: phase=cold action=migrate step=check-migration age=9.04m
+[23:37:36] 000001: phase=cold action=migrate step=check-migration age=9.21m
+[23:37:46] 000001: phase=cold action=migrate step=check-migration age=9.38m
+[23:37:56] 000001: phase=cold action=migrate step=check-migration age=9.55m
+[23:38:06] 000001: phase=cold action=migrate step=check-migration age=9.72m
+[23:38:16] 000001: phase=cold action=migrate step=check-migration age=9.89m
+[23:38:26] 000001: phase=cold action=migrate step=check-migration age=10.06m
+[23:38:37] 000001: phase=cold action=migrate step=check-migration age=10.23m
+[23:38:47] 000001: phase=cold action=migrate step=check-migration age=10.4m
+[23:38:57] 000001: phase=cold action=migrate step=check-migration age=10.56m
+[23:39:07] 000001: phase=cold action=migrate step=check-migration age=10.73m
+[23:39:17] 000001: phase=cold action=migrate step=check-migration age=10.9m
+[23:39:27] 000001: phase=cold action=migrate step=check-migration age=11.07m
+[23:39:38] 000001: phase=cold action=migrate step=check-migration age=11.24m
+[23:39:48] 000001: phase=cold action=migrate step=check-migration age=11.41m
+[23:39:58] 000001: phase=cold action=migrate step=check-migration age=11.58m
+
+⚠️  COLD MIGRATE DEADLOCK: poll loop exhausted 60 iterations (10 min) without resolution.
+    step_info: waiting for 1 shard to move to data_cold tier; primary cannot move because
+    replica already occupies the only cold node (instance-0000000001).
+    Root cause: ILM policy cold phase missing allocate:{number_of_replicas:0}.
+
+── FINDING: Cold phase requires allocate:{number_of_replicas:0} on single-AZ cold tier ──
+   When the cold tier has a single node (single AZ), Elasticsearch cannot move the
+   primary shard to that node if the replica is already there. ILM's implicit migrate
+   action stalls permanently at check-migration.
+   Fix: add 'allocate: {number_of_replicas: 0}' to the cold phase so the replica is
+   removed first, freeing the cold node to accept the primary.
+
+── Updating ILM policy: adding allocate:{number_of_replicas:0} to cold phase ──
+{"acknowledged":true}
+
+── Retrying ILM step on all 5 indices (to pick up updated cold phase) ──
+000001: {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000001] that has not encountered an error when running a Lifecycle Policy"}],"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000001] that has not encountered an error when running a Lifecycle Policy"},"status":400}
+000002: {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000002] that has not encountered an error when running a Lifecycle Policy"}],"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000002] that has not encountered an error when running a Lifecycle Policy"},"status":400}
+000003: {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000003] that has not encountered an error when running a Lifecycle Policy"}],"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000003] that has not encountered an error when running a Lifecycle Policy"},"status":400}
+000004: {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000004] that has not encountered an error when running a Lifecycle Policy"}],"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000004] that has not encountered an error when running a Lifecycle Policy"},"status":400}
+000005: {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000005] that has not encountered an error when running a Lifecycle Policy"}],"type":"illegal_argument_exception","reason":"cannot retry an action for an index [.ds-logs-mytest-default-default-2026.05.27-000005] that has not encountered an error when running a Lifecycle Policy"},"status":400}
+
+
+── Moving all 5 indices back to cold/allocate to pick up updated policy ──
+000001: {"error":"no handler found for uri [/.ds-logs-mytest-default-default-2026.05.27-000001/_ilm/move_to_step] and method [POST]"}
+000002: {"error":"no handler found for uri [/.ds-logs-mytest-default-default-2026.05.27-000002/_ilm/move_to_step] and method [POST]"}
+000003: {"error":"no handler found for uri [/.ds-logs-mytest-default-default-2026.05.27-000003/_ilm/move_to_step] and method [POST]"}
+000004: {"error":"no handler found for uri [/.ds-logs-mytest-default-default-2026.05.27-000004/_ilm/move_to_step] and method [POST]"}
+000005: {"error":"no handler found for uri [/.ds-logs-mytest-default-default-2026.05.27-000005/_ilm/move_to_step] and method [POST]"}
+
+── Moving all 5 indices to cold/allocate via _ilm/move/<index> ──
+000001: {"acknowledged":true}
+000002: {"acknowledged":true}
+000003: {"acknowledged":true}
+000004: {"acknowledged":true}
+000005: {"acknowledged":true}
+
+
+── STEP 5.3 (resumed): Polling cold → frozen transition ──
+[23:48:42] 000001: frozen/searchable_snapshot/check-ts-end-time-passed age=20.32m
+[23:48:42] 000002: frozen/searchable_snapshot/check-ts-end-time-passed age=20.15m
+[23:48:42] 000003: frozen/searchable_snapshot/check-ts-end-time-passed age=19.82m
+[23:48:42] 000004: frozen/searchable_snapshot/check-ts-end-time-passed age=19.65m
+[23:48:42] 000005: frozen/searchable_snapshot/check-ts-end-time-passed age=19.33m
+[23:48:42] ✅ 000001 reached FROZEN — exiting poll loop.
+
+── STEP 5.3 (resumed): Polling cold → frozen transition ──
+[23:48:42] 000001: frozen/searchable_snapshot/check-ts-end-time-passed age=20.32m
+[23:48:42] 000002: frozen/searchable_snapshot/check-ts-end-time-passed age=20.15m
+[23:48:42] 000003: frozen/searchable_snapshot/check-ts-end-time-passed age=19.82m
+[23:48:42] 000004: frozen/searchable_snapshot/check-ts-end-time-passed age=19.65m
+[23:48:42] 000005: frozen/searchable_snapshot/check-ts-end-time-passed age=19.33m
+[23:48:42] ✅ 000001 reached FROZEN — exiting poll loop.
+
+── STEP 5.4: Polling FROZEN phase — waiting for partial mounts to appear ──
+[23:49:15] 000001: 
+[23:49:15] Partial frozen mounts visible: 0
+[23:49:15] ILM snapshots: 5
+
+[23:49:31] 000001: 
+[23:49:31] Partial frozen mounts visible: 0
+[23:49:31] ILM snapshots: 5
+
+[23:49:46] 000001: 
+[23:49:46] Partial frozen mounts visible: 0
+[23:49:46] ILM snapshots: 5
+
+[23:50:02] 000001: 
+[23:50:02] Partial frozen mounts visible: 0
+[23:50:02] ILM snapshots: 5
+
+[23:50:17] 000001: 
+[23:50:17] Partial frozen mounts visible: 0
+[23:50:17] ILM snapshots: 5
+
+[23:50:33] 000001: 
+[23:50:33] Partial frozen mounts visible: 0
+[23:50:33] ILM snapshots: 5
+
+[23:50:48] 000001: 
+[23:50:48] Partial frozen mounts visible: 0
+[23:50:48] ILM snapshots: 5
+
+[23:51:04] 000001: 
+[23:51:04] Partial frozen mounts visible: 0
+[23:51:04] ILM snapshots: 5
+
+[23:51:19] 000001: 
+[23:51:19] Partial frozen mounts visible: 0
+[23:51:19] ILM snapshots: 5
+
+[23:51:35] 000001: 
+[23:51:35] Partial frozen mounts visible: 0
+[23:51:35] ILM snapshots: 5
+
+[23:51:50] 000001: 
+[23:51:50] Partial frozen mounts visible: 0
+[23:51:50] ILM snapshots: 5
+
+[23:52:06] 000001: 
+[23:52:06] Partial frozen mounts visible: 0
+[23:52:06] ILM snapshots: 5
+
+[23:52:21] 000001: 
+[23:52:21] Partial frozen mounts visible: 0
+[23:52:21] ILM snapshots: 5
+
+[23:52:37] 000001: 
+[23:52:37] Partial frozen mounts visible: 0
+[23:52:37] ILM snapshots: 5
+
+[23:52:52] 000001: 
+[23:52:52] Partial frozen mounts visible: 0
+[23:52:52] ILM snapshots: 5
+
+[23:53:08] 000001: 
+[23:53:08] Partial frozen mounts visible: 0
+[23:53:08] ILM snapshots: 5
+
+[23:53:23] 000001: 
+[23:53:23] Partial frozen mounts visible: 0
+[23:53:23] ILM snapshots: 5
+
+[23:53:39] 000001: 
+[23:53:39] Partial frozen mounts visible: 0
+[23:53:39] ILM snapshots: 5
+
+[23:53:55] 000001: 
+[23:53:55] Partial frozen mounts visible: 0
+[23:53:55] ILM snapshots: 5
+
+[23:54:10] 000001: 
+[23:54:10] Partial frozen mounts visible: 0
+[23:54:10] ILM snapshots: 5
+
+[23:54:26] 000001: 
+[23:54:26] Partial frozen mounts visible: 0
+[23:54:26] ILM snapshots: 5
+
+[23:54:41] 000001: 
+[23:54:41] Partial frozen mounts visible: 0
+[23:54:41] ILM snapshots: 5
+
+[23:54:57] 000001: 
+[23:54:57] Partial frozen mounts visible: 0
+[23:54:57] ILM snapshots: 5
+
+[23:55:12] 000001: 
+[23:55:12] Partial frozen mounts visible: 0
+[23:55:12] ILM snapshots: 5
+
+[23:55:28] 000001: 
+[23:55:28] Partial frozen mounts visible: 0
+[23:55:28] ILM snapshots: 5
+
+[23:55:43] 000001: 
+[23:55:43] Partial frozen mounts visible: 0
+[23:55:43] ILM snapshots: 5
+
+[23:55:59] 000001: 
+[23:55:59] Partial frozen mounts visible: 0
+[23:55:59] ILM snapshots: 5
+
+[23:56:14] 000001: 
+[23:56:14] Partial frozen mounts visible: 0
+[23:56:14] ILM snapshots: 5
+
+[23:56:30] 000001: 
+[23:56:30] Partial frozen mounts visible: 0
+[23:56:30] ILM snapshots: 5
+
+[23:56:45] 000001: 
+[23:56:45] Partial frozen mounts visible: 0
+[23:56:45] ILM snapshots: 5
+
+[23:57:01] 000001: 
+[23:57:01] Partial frozen mounts visible: 0
+[23:57:01] ILM snapshots: 5
+
+[23:57:16] 000001: 
+[23:57:16] Partial frozen mounts visible: 0
+[23:57:16] ILM snapshots: 5
+
+[23:57:32] 000001: 
+[23:57:32] Partial frozen mounts visible: 0
+[23:57:32] ILM snapshots: 5
+
+[23:57:48] 000001: 
+[23:57:48] Partial frozen mounts visible: 0
+[23:57:48] ILM snapshots: 5
+
+[23:58:03] 000001: 
+[23:58:03] Partial frozen mounts visible: 0
+[23:58:03] ILM snapshots: 5
+
+[23:58:19] 000001: 
+[23:58:19] Partial frozen mounts visible: 0
+[23:58:19] ILM snapshots: 5
+
+[23:58:34] 000001: 
+[23:58:34] Partial frozen mounts visible: 0
+[23:58:34] ILM snapshots: 5
+
+[23:58:50] 000001: 
+[23:58:50] Partial frozen mounts visible: 0
+[23:58:50] ILM snapshots: 5
+
+[23:59:05] 000001: 
+[23:59:05] Partial frozen mounts visible: 0
+[23:59:05] ILM snapshots: 5
+
+[23:59:21] 000001: 
+[23:59:21] Partial frozen mounts visible: 0
+[23:59:21] ILM snapshots: 5
+
+[23:59:36] 000001: 
+[23:59:36] Partial frozen mounts visible: 0
+[23:59:36] ILM snapshots: 5
+
+[23:59:52] 000001: 
+[23:59:52] Partial frozen mounts visible: 0
+[23:59:52] ILM snapshots: 5
+
+[00:00:07] 000001: 
+[00:00:07] Partial frozen mounts visible: 0
+[00:00:07] ILM snapshots: 5
+
+[00:00:23] 000001: 
+[00:00:23] Partial frozen mounts visible: 0
+[00:00:23] ILM snapshots: 5
+
+[00:00:39] 000001: 
+[00:00:39] Partial frozen mounts visible: 0
+[00:00:39] ILM snapshots: 5
+
+[00:00:54] 000001: 
+[00:00:54] Partial frozen mounts visible: 0
+[00:00:54] ILM snapshots: 5
+
+[00:01:10] 000001: 
+[00:01:10] Partial frozen mounts visible: 0
+[00:01:10] ILM snapshots: 5
+
+[00:01:26] 000001: 
+[00:01:26] Partial frozen mounts visible: 0
+[00:01:26] ILM snapshots: 5
+
+[00:01:41] 000001: 
+[00:01:41] Partial frozen mounts visible: 0
+[00:01:41] ILM snapshots: 5
+
+[00:01:57] 000001: 
+[00:01:57] Partial frozen mounts visible: 0
+[00:01:57] ILM snapshots: 5
+
+[00:02:12] 000001: 
+[00:02:12] Partial frozen mounts visible: 0
+[00:02:12] ILM snapshots: 5
+
+[00:02:28] 000001: 
+[00:02:28] Partial frozen mounts visible: 0
+[00:02:28] ILM snapshots: 5
+
+[00:02:43] 000001: 
+[00:02:43] Partial frozen mounts visible: 0
+[00:02:43] ILM snapshots: 5
+
+[00:02:59] 000001: 
+[00:02:59] Partial frozen mounts visible: 0
+[00:02:59] ILM snapshots: 5
+
+[00:03:14] 000001: 
+[00:03:14] Partial frozen mounts visible: 0
+[00:03:14] ILM snapshots: 5
+
+[00:03:30] 000001: 
+[00:03:30] Partial frozen mounts visible: 0
+[00:03:30] ILM snapshots: 5
+
+[00:03:46] 000001: 
+[00:03:46] Partial frozen mounts visible: 0
+[00:03:46] ILM snapshots: 5
+
+[00:04:24] 000001: 
+[00:04:24] Partial frozen mounts visible: 0
+[00:04:24] ILM snapshots: 5
+
+[00:04:39] 000001: 
+[00:04:39] Partial frozen mounts visible: 0
+[00:04:39] ILM snapshots: 5
+
+[00:04:55] 000001: 
+[00:04:55] Partial frozen mounts visible: 0
+[00:04:55] ILM snapshots: 5
+
+
+── STEP 5.4: Polling FROZEN phase — waiting for partial mounts to appear ──
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:49:15] 000001: 
+[23:49:15] Partial frozen mounts visible: 0
+[23:49:15] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:49:31] 000001: 
+[23:49:31] Partial frozen mounts visible: 0
+[23:49:31] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:49:46] 000001: 
+[23:49:46] Partial frozen mounts visible: 0
+[23:49:46] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:50:02] 000001: 
+[23:50:02] Partial frozen mounts visible: 0
+[23:50:02] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:50:17] 000001: 
+[23:50:17] Partial frozen mounts visible: 0
+[23:50:17] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:50:33] 000001: 
+[23:50:33] Partial frozen mounts visible: 0
+[23:50:33] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:50:48] 000001: 
+[23:50:48] Partial frozen mounts visible: 0
+[23:50:48] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:51:04] 000001: 
+[23:51:04] Partial frozen mounts visible: 0
+[23:51:04] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:51:19] 000001: 
+[23:51:19] Partial frozen mounts visible: 0
+[23:51:19] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:51:35] 000001: 
+[23:51:35] Partial frozen mounts visible: 0
+[23:51:35] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:51:50] 000001: 
+[23:51:50] Partial frozen mounts visible: 0
+[23:51:50] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:52:06] 000001: 
+[23:52:06] Partial frozen mounts visible: 0
+[23:52:06] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:52:21] 000001: 
+[23:52:21] Partial frozen mounts visible: 0
+[23:52:21] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:52:37] 000001: 
+[23:52:37] Partial frozen mounts visible: 0
+[23:52:37] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:52:52] 000001: 
+[23:52:52] Partial frozen mounts visible: 0
+[23:52:52] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:53:08] 000001: 
+[23:53:08] Partial frozen mounts visible: 0
+[23:53:08] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:53:23] 000001: 
+[23:53:23] Partial frozen mounts visible: 0
+[23:53:23] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:53:39] 000001: 
+[23:53:39] Partial frozen mounts visible: 0
+[23:53:39] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:53:55] 000001: 
+[23:53:55] Partial frozen mounts visible: 0
+[23:53:55] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:54:10] 000001: 
+[23:54:10] Partial frozen mounts visible: 0
+[23:54:10] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:54:26] 000001: 
+[23:54:26] Partial frozen mounts visible: 0
+[23:54:26] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:54:41] 000001: 
+[23:54:41] Partial frozen mounts visible: 0
+[23:54:41] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:54:57] 000001: 
+[23:54:57] Partial frozen mounts visible: 0
+[23:54:57] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:55:12] 000001: 
+[23:55:12] Partial frozen mounts visible: 0
+[23:55:12] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:55:28] 000001: 
+[23:55:28] Partial frozen mounts visible: 0
+[23:55:28] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:55:43] 000001: 
+[23:55:43] Partial frozen mounts visible: 0
+[23:55:43] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:55:59] 000001: 
+[23:55:59] Partial frozen mounts visible: 0
+[23:55:59] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:56:14] 000001: 
+[23:56:14] Partial frozen mounts visible: 0
+[23:56:14] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:56:30] 000001: 
+[23:56:30] Partial frozen mounts visible: 0
+[23:56:30] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:56:45] 000001: 
+[23:56:45] Partial frozen mounts visible: 0
+[23:56:45] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:57:01] 000001: 
+[23:57:01] Partial frozen mounts visible: 0
+[23:57:01] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:57:16] 000001: 
+[23:57:16] Partial frozen mounts visible: 0
+[23:57:16] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:57:32] 000001: 
+[23:57:32] Partial frozen mounts visible: 0
+[23:57:32] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:57:48] 000001: 
+[23:57:48] Partial frozen mounts visible: 0
+[23:57:48] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:58:03] 000001: 
+[23:58:03] Partial frozen mounts visible: 0
+[23:58:03] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:58:19] 000001: 
+[23:58:19] Partial frozen mounts visible: 0
+[23:58:19] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:58:34] 000001: 
+[23:58:34] Partial frozen mounts visible: 0
+[23:58:34] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:58:50] 000001: 
+[23:58:50] Partial frozen mounts visible: 0
+[23:58:50] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:59:05] 000001: 
+[23:59:05] Partial frozen mounts visible: 0
+[23:59:05] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:59:21] 000001: 
+[23:59:21] Partial frozen mounts visible: 0
+[23:59:21] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:59:36] 000001: 
+[23:59:36] Partial frozen mounts visible: 0
+[23:59:36] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[23:59:52] 000001: 
+[23:59:52] Partial frozen mounts visible: 0
+[23:59:52] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:00:07] 000001: 
+[00:00:07] Partial frozen mounts visible: 0
+[00:00:07] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:00:23] 000001: 
+[00:00:23] Partial frozen mounts visible: 0
+[00:00:23] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:00:39] 000001: 
+[00:00:39] Partial frozen mounts visible: 0
+[00:00:39] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:00:54] 000001: 
+[00:00:54] Partial frozen mounts visible: 0
+[00:00:54] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:01:10] 000001: 
+[00:01:10] Partial frozen mounts visible: 0
+[00:01:10] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:01:26] 000001: 
+[00:01:26] Partial frozen mounts visible: 0
+[00:01:26] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:01:41] 000001: 
+[00:01:41] Partial frozen mounts visible: 0
+[00:01:41] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:01:57] 000001: 
+[00:01:57] Partial frozen mounts visible: 0
+[00:01:57] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:02:12] 000001: 
+[00:02:12] Partial frozen mounts visible: 0
+[00:02:12] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:02:28] 000001: 
+[00:02:28] Partial frozen mounts visible: 0
+[00:02:28] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:02:43] 000001: 
+[00:02:43] Partial frozen mounts visible: 0
+[00:02:43] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:02:59] 000001: 
+[00:02:59] Partial frozen mounts visible: 0
+[00:02:59] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:03:14] 000001: 
+[00:03:14] Partial frozen mounts visible: 0
+[00:03:14] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:03:30] 000001: 
+[00:03:30] Partial frozen mounts visible: 0
+[00:03:30] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:03:46] 000001: 
+[00:03:46] Partial frozen mounts visible: 0
+[00:03:46] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:04:24] 000001: 
+[00:04:24] Partial frozen mounts visible: 0
+[00:04:24] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:04:39] 000001: 
+[00:04:39] Partial frozen mounts visible: 0
+[00:04:39] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:04:55] 000001: 
+[00:04:55] Partial frozen mounts visible: 0
+[00:04:55] ILM snapshots: 5
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+
+
+[00:06:12] NOTE: _ilm/explain returned null for .ds-... indices because they were
+[00:06:12] deleted and replaced by partial-.ds-... frozen mounts during the poll.
+
+── FROZEN PHASE CONFIRMED — Current state at 00:06:12 ──
+
+Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.27-000001",
+  "partial-.ds-logs-mytest-default-default-2026.05.27-000002",
+  "partial-.ds-logs-mytest-default-default-2026.05.27-000003",
+  "partial-.ds-logs-mytest-default-default-2026.05.27-000004",
+  "partial-.ds-logs-mytest-default-default-2026.05.27-000005",
+  ".ds-logs-mytest-default-default-2026.05.27-000006"
+]
+
+── ILM explain for partial mount 000001 ──
+{
+  "phase": "frozen",
+  "action": "complete",
+  "step": "complete",
+  "age": "37.83m"
+}
+
+── ILM snapshots created (one per backing index) ──
+[
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-default-default-2026.05.27-000001-approach_a_default_policy-ajjhiiedsxu8_5urutgn8g",
+    "state": "SUCCESS",
+    "index": ".ds-logs-mytest-default-default-2026.05.27-000001"
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-default-default-2026.05.27-000002-approach_a_default_policy-z_p1k8yhqucnjgc5pxor_w",
+    "state": "SUCCESS",
+    "index": ".ds-logs-mytest-default-default-2026.05.27-000002"
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-default-default-2026.05.27-000003-approach_a_default_policy-d-9rtschrn6vbxpsck3smw",
+    "state": "SUCCESS",
+    "index": ".ds-logs-mytest-default-default-2026.05.27-000003"
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-default-default-2026.05.27-000004-approach_a_default_policy-oa3apaq0rnwvioioxqicgg",
+    "state": "SUCCESS",
+    "index": ".ds-logs-mytest-default-default-2026.05.27-000004"
+  },
+  {
+    "snapshot": "2026.05.27-.ds-logs-mytest-default-default-2026.05.27-000005-approach_a_default_policy-2akcqklcqdurv0ofgb8vzq",
+    "state": "SUCCESS",
+    "index": ".ds-logs-mytest-default-default-2026.05.27-000005"
+  }
+]
+
+── ✅ CHECKPOINT C — FROZEN TIER: Query via data stream ──
+{
+  "total": {
+    "value": 5,
+    "relation": "eq"
+  },
+  "hits": [
+    "Log event 1 — backing index 000001",
+    "Log event 2 — backing index 000002",
+    "Log event 3 — backing index 000003",
+    "Log event 4 — backing index 000004",
+    "Log event 5 — backing index 000005"
+  ]
+}
+
+── CHECKPOINT C count ──
+{"count":5,"_shards":{"total":6,"successful":6,"skipped":0,"failed":0}}
+
+── [00:06:25] STEP 5.5: Shortening delete min_age to 45m to trigger delete phase ──
+    (indices already ~38m old; with 45m they will delete in ~7 minutes)
+{"acknowledged":true}
+
+── STEP 5.5: Polling DELETE phase — watching hit count drop to 0 ──
+[00:06:39] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:06:54] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:10] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:25] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:41] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:56] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:12] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:28] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:43] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:59] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:09:14] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:09:30] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:09:45] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:01] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:16] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:32] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:47] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:03] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:18] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:34] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:49] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:05] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:20] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:36] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:51] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:13:07] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:13:22] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:13:38] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=delete
+[00:13:53] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=
+[00:14:09] count=3 partial_mounts=0
+0 ilm_snapshots=3 000001_phase=
+[00:14:24] count=1 partial_mounts=0
+0 ilm_snapshots=1 000001_phase=
+[00:14:40] count=1 partial_mounts=0
+0 ilm_snapshots=1 000001_phase=
+[00:14:55] count=0 partial_mounts=0
+0 ilm_snapshots=0 000001_phase=
+[00:14:55] ❌ CHECKPOINT D — Hit count reached 0 (or data stream gone). Delete phase complete.
+
+── STEP 5.5: Polling DELETE phase — watching hit count drop to 0 ──
+[00:06:39] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:06:54] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:10] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:25] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:41] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:07:56] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:12] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:28] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:43] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:08:59] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:09:14] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:09:30] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:09:45] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:01] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:16] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:32] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:10:47] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:03] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:18] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:34] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:11:49] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:05] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:20] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:36] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:12:51] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:13:07] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:13:22] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=frozen
+[00:13:38] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=delete
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:13:53] count=5 partial_mounts=0
+0 ilm_snapshots=5 000001_phase=
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:14:09] count=3 partial_mounts=0
+0 ilm_snapshots=3 000001_phase=
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:14:24] count=1 partial_mounts=0
+0 ilm_snapshots=1 000001_phase=
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:14:40] count=1 partial_mounts=0
+0 ilm_snapshots=1 000001_phase=
+jq: error (at <stdin>:0): Cannot iterate over null (null)
+[00:14:55] count=0 partial_mounts=0
+0 ilm_snapshots=0 000001_phase=
+[00:14:55] ❌ CHECKPOINT D — Hit count reached 0 (or data stream gone). Delete phase complete.
+
+── [00:15:34] CHECKPOINT D: Final state after delete phase ──
+Data stream:
+[
+  ".ds-logs-mytest-default-default-2026.05.27-000006"
+]
+
+Search result:
+{
+  "total": {
+    "value": 0,
+    "relation": "eq"
+  },
+  "hits": []
+}
+
+ILM snapshots remaining:
+[]
+
+
+======================================================================
+RUN COMPLETE — 2026-05-28T00:15:39Z
+Output file: runs/v8.19/hot_cold_frozen.txt
+======================================================================
+
+── [00:22:25] CLEANUP ──
+9.1 Reset ILM poll interval:
+{"acknowledged":true,"persistent":{},"transient":{}}
+9.2 Delete SLM policy:
+{"acknowledged":true}
+9.3 Delete data stream:
+{"acknowledged":true}
+9.4 Delete ILM policy:
+{"acknowledged":true}
+9.5 Delete index template:
+{"acknowledged":true}
+9.6 Delete remaining SLM snapshots:
+Deleting: approach-a-default-slm-2026.05.27-n42a5ndetvsmjz1kmu_daa
+approach-a-default-slm-2026.05.27-qc00ixyzq0od4wtypupwjw
+approach-a-default-slm-2026.05.28-qkxog0nbrjyi4ys1lpxghw
+approach-a-default-slm-2026.05.28-mzcsraxitde4mfti4ul8iw
+
+
+9.7 Verify cluster is clean:
+  Data streams:
+0
+  ILM policies (approach_a_*):
+[]
+  ILM + SLM snapshots remaining:
+[
+  "approach-a-default-slm-2026.05.27-n42a5ndetvsmjz1kmu_daa",
+  "approach-a-default-slm-2026.05.27-qc00ixyzq0od4wtypupwjw",
+  "approach-a-default-slm-2026.05.28-qkxog0nbrjyi4ys1lpxghw",
+  "approach-a-default-slm-2026.05.28-mzcsraxitde4mfti4ul8iw"
+]
+
+[00:22:37] Cleanup complete.
+Deleting SLM snapshot: approach-a-default-slm-2026.05.27-n42a5ndetvsmjz1kmu_daa
+{"acknowledged":true}
+Deleting SLM snapshot: approach-a-default-slm-2026.05.27-qc00ixyzq0od4wtypupwjw
+{"acknowledged":true}
+Deleting SLM snapshot: approach-a-default-slm-2026.05.28-qkxog0nbrjyi4ys1lpxghw
+{"acknowledged":true}
+Deleting SLM snapshot: approach-a-default-slm-2026.05.28-mzcsraxitde4mfti4ul8iw
+{"acknowledged":true}
+Verification — remaining approach-a-* and ILM snapshots:
+[]

@@ -90,6 +90,7 @@ curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
 - Copy `.env.example` → `.env_v<X.Y>` and fill in `ES_URL` and `API_KEY`.
 - Always `source` the correct env file at the start of every shell command block.
 - Never hardcode credentials in scripts or output files.
+- Never record the cluster URL (`ES_URL`) in any git-tracked document (findings, run outputs, scenario files, etc.). Refer to the deployment generically, e.g. "the Elastic Cloud deployment" or "the cluster".
 
 ---
 
@@ -123,7 +124,7 @@ After every completed test run, create a summary file **before** starting cleanu
   - First run of a variant: no run counter in the summary filename (one summary covers all runs unless findings differ significantly).
 - **Never overwrite an existing summary.** Read it first; if the new run produced different findings, append a dated "Run N update" section rather than replacing.
 - **Required sections:**
-  - Header block: cluster, version, run date, duration, output file, scenario file, data stream, policy names
+  - Header block: cluster name (no URL), version, run date, duration, output file, scenario file, data stream, policy names
   - **Timeline** — key events with approximate timestamps
   - **Findings** — one clearly labelled finding per observed behaviour (failures, unexpected results, confirmations)
   - **ILM snapshot names** produced during the run (for traceability)

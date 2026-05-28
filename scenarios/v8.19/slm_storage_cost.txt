@@ -1,0 +1,571 @@
+// =====================================================================
+// Approach A: Data Stream Test Procedure (For Kibana Dev Tools)
+// Target version: Elasticsearch / Elastic Cloud  v8.19
+// Variant: SLM Storage Cost Measurement
+// =====================================================================
+//
+// PURPOSE
+// -------
+// This scenario quantifies the additional repository storage cost of
+// retaining SLM snapshots alongside ILM searchable-snapshots.
+//
+// BACKGROUND:
+//   - ILM creates a frozen-tier searchable snapshot of each backing index
+//     and keeps it after deletion (delete_searchable_snapshot: false).
+//   - SLM can capture the same data independently at controlled moments.
+//   - If SLM retention is extended beyond the ILM snapshot lifetime, the
+//     SLM snapshot becomes a last-resort recovery source — but at extra cost.
+//   - Snapshot repositories use blob-level deduplication: if SLM and ILM
+//     snapshots share Lucene segment files, the incremental bytes added
+//     by the SLM snapshot can be very small.
+//
+// THIS SCENARIO ANSWERS:
+//   1. How much extra repository storage does an SLM snapshot add on top
+//      of the ILM frozen snapshot for the same backing index?
+//   2. Does taking SLM AFTER force merge cost less than taking it BEFORE,
+//      because the post-merge segments match those in the ILM snapshot?
+//
+// KEY HYPOTHESIS:
+//   SLM snapshot taken AFTER force merge should deduplicate almost
+//   completely against the ILM frozen snapshot (both reference the same
+//   single-segment Lucene file). SLM taken BEFORE force merge captures a
+//   different segment layout → less deduplication → higher extra cost.
+//
+// TEST FLOW PER BACKING INDEX:
+//   Ingest 3 docs (→ multiple segments via separate refresh cycles)
+//   ILM hot.rollover fires                     (→ backing index sealed)
+//   SLM snapshot Pre-N                         (raw multi-segment state)
+//   Manual force merge to 1 segment
+//   SLM snapshot Post-N                        (single-segment state)
+//   ILM frozen (force_merge_index: false)      (ILM snapshots already-merged data)
+//   ILM delete  (backing index removed)
+//   Measure with check_snapshot_datasize.sh
+//
+// Repeated for 5 backing indices (000001–000005).
+//
+// ⚠️  v8.19 vs v9.2+ DIFFERENCE — NO fm-clone step
+// In v9.2+, ILM creates a temporary "fm-clone-<uuid>-" copy of the
+// backing index, force-merges THAT clone, and then snapshots the clone.
+// In v8.x (including v8.19), ILM snapshots the original backing index
+// directly under its original name. Therefore the snapshot contains:
+//   .ds-logs-mytest-default-default-2026.05.28-000001
+// (no "fm-clone-..." prefix), and restore steps are simpler.
+//
+// ⚠️  NAMESPACE COLLISION WARNING
+// This scenario uses the "default" namespace: logs-mytest-default-default.
+// Do NOT run this simultaneously with scenarios/v8.19/base.txt or
+// scenarios/v8.19/slm.txt on the same cluster (those use logs-mytest-default,
+// and both scenarios register a template matching logs-mytest-*).
+// Always confirm no leftover resources before starting.
+//
+// RESOURCE NAMES
+//   Data stream    : logs-mytest-default-default
+//   Index template : approach_a_default_template  (pattern: logs-mytest-default-*)
+//   ILM policy     : approach_a_default_policy
+//   SLM policy     : approach_a_default_slm_policy
+//   Restore prefix : restored-default-   (Step 7 optional demo only)
+
+// ---------------------------------------------------------------------
+// Pre-flight: Confirm no leftover resources from a previous run
+// ---------------------------------------------------------------------
+GET _data_stream/logs-mytest-default-default
+GET _ilm/policy/approach_a_default_policy
+GET _slm/policy/approach_a_default_slm_policy
+GET _index_template/approach_a_default_template
+// All four should return 404. If any exist, run Step 9 cleanup first.
+
+// ---------------------------------------------------------------------
+// Step 1: Preparation (Shorten ILM poll interval)
+// ---------------------------------------------------------------------
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": "10s"
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2: Create ILM policy
+// ---------------------------------------------------------------------
+// hot:    rollover at 3 docs. With separate doc ingests and a default
+//         refresh interval of 1s, each doc lands in its own Lucene segment,
+//         giving a meaningful pre-merge vs post-merge storage difference.
+//
+// frozen: min_age 3m after rollover — provides a ~3-minute window between
+//         rollover and ILM's frozen snapshot for manual force merge and
+//         SLM snapshots.
+//         force_merge_index: false — ILM skips its built-in force merge
+//         because we have already merged manually. Both the SLM Post-N
+//         snapshot and the ILM frozen snapshot then reference the same
+//         single-segment files, maximising blob deduplication.
+//
+// delete: min_age 8m (3m + 5m buffer) keeps all snapshots available
+//         for Step 6 storage measurement after deletion.
+PUT _ilm/policy/approach_a_default_policy
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "min_age": "0ms",
+        "actions": {
+          "rollover": { "max_docs": 3 }
+        }
+      },
+      "frozen": {
+        "min_age": "3m",
+        "actions": {
+          "searchable_snapshot": {
+            "snapshot_repository": "found-snapshots",
+            "force_merge_index": false
+          }
+        }
+      },
+      "delete": {
+        "min_age": "8m",
+        "actions": {
+          "delete": {
+            "delete_searchable_snapshot": false
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Step 2.5: Create SLM policy
+// ---------------------------------------------------------------------
+// Far-future schedule (year 2099): never fires automatically.
+// All snapshots are executed manually at precise measurement checkpoints.
+//
+// max_count: 20 — retains all SLM snapshots for this test session.
+// Pre + Post for 5 backing indices = 10 SLM snapshots; 20 leaves headroom.
+//
+// partial: true — allows the snapshot to complete even if a partial mount
+// (frozen backing index) is present in the data stream at snapshot time.
+PUT _slm/policy/approach_a_default_slm_policy
+{
+  "name": "<approach-a-storage-cost-{now/d}>",
+  "schedule": "0 0 0 1 1 ? 2099",
+  "repository": "found-snapshots",
+  "config": {
+    "indices": ["logs-mytest-default-default"],
+    "include_global_state": false,
+    "partial": true
+  },
+  "retention": {
+    "expire_after": "30d",
+    "min_count": 1,
+    "max_count": 20
+  }
+}
+
+// Verify the policy was created:
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// ---------------------------------------------------------------------
+// Step 3: Create Index Template for Data Streams
+// ---------------------------------------------------------------------
+// Pattern "logs-mytest-default-*" targets only the "default" namespace
+// data streams. Priority 300 outranks the existing "approach_a_ds_template"
+// (priority 200, pattern "logs-mytest-*") in case both are present.
+PUT _index_template/approach_a_default_template
+{
+  "index_patterns": ["logs-mytest-default-*"],
+  "priority": 300,
+  "data_stream": { },
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "approach_a_default_policy"
+    }
+  }
+}
+
+// Verify the template was created and the pattern looks correct:
+GET _index_template/approach_a_default_template
+
+// ---------------------------------------------------------------------
+// Step 4: Ingest + SLM Snapshots (5 backing-index cycles)
+// ---------------------------------------------------------------------
+// PATTERN PER CYCLE (for backing index 000N):
+//
+//   a) Ingest 3 docs into the current write index, pausing ~2s between
+//      each to ensure separate refresh cycles → 3 distinct Lucene segments.
+//   b) Wait ~15s for ILM to detect max_docs: 3 and roll over.
+//   c) Confirm rollover: GET _cat/indices shows a new 000N+1 write index.
+//   d) POST SLM execute → SLM Pre-N  (multi-segment state of 000N)
+//      GET _slm/policy/...?human    → note last_success.snapshot_name
+//   e) POST 000N/_forcemerge?max_num_segments=1&wait_for_completion=true
+//      (blocks until merge completes; response: "successful": 1)
+//   f) POST SLM execute → SLM Post-N (single-segment state of 000N)
+//      GET _slm/policy/...?human    → note last_success.snapshot_name
+//   g) [BASH] check_snapshot_datasize.sh <000N full name>
+//
+// TIMING: frozen.min_age is 3m after rollover. Steps (d)–(f) must
+// complete within that window before ILM begins the frozen snapshot.
+// With a fast forcemerge on a small test index this is easily achievable.
+
+// ════════════════════════════════════════════════════════════════════
+// CYCLE 1 — Backing index 000001
+// ════════════════════════════════════════════════════════════════════
+
+// 4.1a — Ingest 3 docs (pause ~2s between each to generate 3 segments)
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:00:00Z", "message": "Log event 1 in backing index 1" }
+
+// WAIT ~2 SECONDS (allows a refresh cycle → distinct segment)
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:00:02Z", "message": "Log event 2 in backing index 1" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:00:04Z", "message": "Log event 3 in backing index 1" }
+
+// 4.1b — WAIT ~15 SECONDS for ILM rollover, then confirm:
+GET _cat/indices/.ds-logs-mytest-default-default-*?v&expand_wildcards=all
+// Expected: 000001 (read-only, 3 docs) and 000002 (write index, 0 docs).
+
+// 4.1d — SLM Pre-1: capture 000001 before force merge.
+// Snapshot contains 000001 in its raw multi-segment state.
+POST _slm/policy/approach_a_default_slm_policy/_execute
+
+// Confirm SLM Pre-1 completed and record the snapshot name:
+GET _slm/policy/approach_a_default_slm_policy?human
+// → Note last_success.snapshot_name  (call it "SLM Pre-1")
+
+// 4.1e — Force merge 000001 to 1 segment (blocks until done).
+// Replace the date below with the actual date shown in _cat above.
+POST .ds-logs-mytest-default-default-2026.05.28-000001/_forcemerge?max_num_segments=1&wait_for_completion=true
+// Expected response: { "shards": { "total": 1, "successful": 1, "failed": 0 } }
+
+// 4.1f — SLM Post-1: capture 000001 after force merge.
+POST _slm/policy/approach_a_default_slm_policy/_execute
+
+// Confirm SLM Post-1 completed and record the snapshot name:
+GET _slm/policy/approach_a_default_slm_policy?human
+// → Note last_success.snapshot_name  (call it "SLM Post-1")
+
+// 4.1g — [BASH] First storage checkpoint for 000001 (Pre + Post SLM, no ILM yet):
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000001
+// Expected: 2 SLM rows. Post-1 incremental should be < Pre-1 total (dedupe begins).
+
+// ════════════════════════════════════════════════════════════════════
+// CYCLE 2 — Backing index 000002
+// ════════════════════════════════════════════════════════════════════
+
+// 4.2a — Ingest 3 docs into 000002
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:05:00Z", "message": "Log event 1 in backing index 2" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:05:02Z", "message": "Log event 2 in backing index 2" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:05:04Z", "message": "Log event 3 in backing index 2" }
+
+// 4.2b — WAIT ~15 SECONDS, then confirm rollover to 000003:
+GET _cat/indices/.ds-logs-mytest-default-default-*?v&expand_wildcards=all
+
+// 4.2d — SLM Pre-2
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// 4.2e — Force merge 000002
+POST .ds-logs-mytest-default-default-2026.05.28-000002/_forcemerge?max_num_segments=1&wait_for_completion=true
+
+// 4.2f — SLM Post-2
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// 4.2g — [BASH] Storage checkpoint for 000002:
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000002
+
+// ════════════════════════════════════════════════════════════════════
+// CYCLE 3 — Backing index 000003
+// ════════════════════════════════════════════════════════════════════
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:10:00Z", "message": "Log event 1 in backing index 3" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:10:02Z", "message": "Log event 2 in backing index 3" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:10:04Z", "message": "Log event 3 in backing index 3" }
+
+// WAIT ~15 SECONDS, then confirm rollover to 000004:
+GET _cat/indices/.ds-logs-mytest-default-default-*?v&expand_wildcards=all
+
+// SLM Pre-3
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// Force merge 000003
+POST .ds-logs-mytest-default-default-2026.05.28-000003/_forcemerge?max_num_segments=1&wait_for_completion=true
+
+// SLM Post-3
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// [BASH] Storage checkpoint for 000003:
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000003
+
+// ════════════════════════════════════════════════════════════════════
+// CYCLE 4 — Backing index 000004
+// ════════════════════════════════════════════════════════════════════
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:15:00Z", "message": "Log event 1 in backing index 4" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:15:02Z", "message": "Log event 2 in backing index 4" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:15:04Z", "message": "Log event 3 in backing index 4" }
+
+// WAIT ~15 SECONDS, then confirm rollover to 000005:
+GET _cat/indices/.ds-logs-mytest-default-default-*?v&expand_wildcards=all
+
+// SLM Pre-4
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// Force merge 000004
+POST .ds-logs-mytest-default-default-2026.05.28-000004/_forcemerge?max_num_segments=1&wait_for_completion=true
+
+// SLM Post-4
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// [BASH] Storage checkpoint for 000004:
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000004
+
+// ════════════════════════════════════════════════════════════════════
+// CYCLE 5 — Backing index 000005
+// ════════════════════════════════════════════════════════════════════
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:20:00Z", "message": "Log event 1 in backing index 5" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:20:02Z", "message": "Log event 2 in backing index 5" }
+
+// WAIT ~2 SECONDS
+
+POST logs-mytest-default-default/_doc
+{ "@timestamp": "2026-05-28T10:20:04Z", "message": "Log event 3 in backing index 5" }
+
+// WAIT ~15 SECONDS, then confirm rollover to 000006:
+GET _cat/indices/.ds-logs-mytest-default-default-*?v&expand_wildcards=all
+
+// SLM Pre-5
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// Force merge 000005
+POST .ds-logs-mytest-default-default-2026.05.28-000005/_forcemerge?max_num_segments=1&wait_for_completion=true
+
+// SLM Post-5
+POST _slm/policy/approach_a_default_slm_policy/_execute
+GET _slm/policy/approach_a_default_slm_policy?human
+
+// [BASH] Storage checkpoint for 000005:
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000005
+
+// All 10 SLM snapshots executed. Record the full list before monitoring:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
+// SLM snapshots are named: approach-a-storage-cost-<date>[-<N>]
+// ILM snapshots (none yet) will be named: <YYYY.MM.DD>-<backing-index>-approach_a_default_policy-<uuid>
+
+// ---------------------------------------------------------------------
+// Step 5: Monitor — Wait for All 5 Backing Indices to Reach Frozen
+// ---------------------------------------------------------------------
+// ILM advances each rolled-over backing index to frozen 3 minutes after
+// rollover. The frozen.searchable_snapshot action creates an ILM snapshot
+// (with force_merge_index: false — the already-merged segments are used).
+//
+// Poll every 30 seconds. Look for partial-.ds-... mounts appearing:
+GET _cat/indices?v=true&expand_wildcards=all
+// Frozen: partial-.ds-logs-mytest-default-default-2026.05.28-000001  etc.
+
+// Track ILM snapshot count growing from 0 → 5:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// Check ILM phase for a specific backing index:
+GET .ds-logs-mytest-default-default-2026.05.28-000001/_ilm/explain
+// Expect "phase": "frozen" or "phase": "delete" once frozen snapshot is done.
+
+// ── CHECKPOINT: All 5 backing indices frozen ──────────────────────────────
+// [BASH] Run the storage measurement script for each backing index.
+// Each call reports SLM Pre-N, SLM Post-N, and ILM incremental bytes.
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000001
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000002
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000003
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000004
+// ./scripts/v8.19/check_snapshot_datasize.sh .ds-logs-mytest-default-default-2026.05.28-000005
+//
+// Expected pattern per index:
+//   SLM Pre-N  incremental : largest   (first snapshot of this data)
+//   SLM Post-N incremental : smaller   (merged segments partly overlap Pre-N blobs)
+//   ILM        incremental : near zero (same merged segments as SLM Post-N → max dedupe)
+
+// ---------------------------------------------------------------------
+// Step 6: Wait for Delete Phase — Final Storage Measurement
+// ---------------------------------------------------------------------
+// delete.min_age is 8m after rollover. After deletion, the backing index
+// and its partial mount are removed; the ILM snapshot and all SLM snapshots
+// remain (delete_searchable_snapshot: false).
+//
+// Poll until partial mounts disappear from _cat:
+GET _cat/indices?v=true&expand_wildcards=all
+// All partial-.ds-... entries for 000001–000005 should be absent.
+
+// Confirm the data stream shows only the current write index (000006):
+GET _data_stream/logs-mytest-default-default
+
+// ── FINAL CHECKPOINT: Fill in the storage cost summary table ──────────────
+// [BASH] Re-run check_snapshot_datasize.sh for all 5 backing indices.
+// Collect the INCREMENTAL column for each snapshot type and fill in:
+//
+//   Backing index | SLM Pre (incr B) | SLM Post (incr B) | ILM (incr B) | Sum (incr B)
+//   000001        |                  |                   |              |
+//   000002        |                  |                   |              |
+//   000003        |                  |                   |              |
+//   000004        |                  |                   |              |
+//   000005        |                  |                   |              |
+//   ─────────────────────────────────────────────────────────────────────────
+//   Σ SLM Pre     |                  |                   |              |
+//   Σ SLM Post    |                  |                   |              |
+//   Σ ILM only    |                  |                   |              |
+//   Σ Repository  |                  |                   |              |
+//
+// KEY METRICS:
+//   Extra cost (keeping SLM Pre)  = Σ SLM Pre  incremental bytes
+//   Extra cost (keeping SLM Post) = Σ SLM Post incremental bytes   ← expected to be much smaller
+//   Overhead ratio (Post vs Pre)  = Σ SLM Post / Σ SLM Pre         ← quantifies the force-merge benefit
+//
+// CONCLUSION: If overhead ratio is close to 0, keeping SLM snapshots
+// taken AFTER force merge adds negligible storage cost on top of the ILM
+// frozen snapshot, because both snapshots reference the same Lucene segments.
+
+// ---------------------------------------------------------------------
+// Step 7: (Optional) Demonstrate SLM as Recovery After ILM Snapshot Expiry
+// ---------------------------------------------------------------------
+// SCENARIO: Simulate the ILM snapshot retention period ending by manually
+// deleting the ILM snapshots. Then restore 000001 from SLM Post-1 to
+// confirm SLM is a viable last-resort recovery source.
+
+// 7.1 — List all snapshots to identify names:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
+// ILM snapshot names: <date>-<backing-index>-approach_a_default_policy-<uuid>
+//   e.g. 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000001-approach_a_default_policy-<uuid>
+// SLM snapshot names: approach-a-storage-cost-<date>[-<N>]
+
+// 7.2 — (SIMULATION) Delete the ILM frozen snapshot for 000001:
+// DELETE _snapshot/found-snapshots/<ilm_snapshot_name_for_000001>
+
+// 7.3 — Identify SLM Post-1: the snapshot taken immediately after the
+// _forcemerge for 000001 in Cycle 1. It is the 2nd snapshot in start_time
+// order from the list above that contains 000001 in its indices.
+//
+// Inspect it to confirm it contains the force-merged backing index:
+// GET _snapshot/found-snapshots/<slm_post_1_snapshot_name>
+// Look for ".ds-logs-mytest-default-default-2026.05.28-000001" in "indices".
+
+// 7.4 — Restore 000001 from SLM Post-1:
+POST _snapshot/found-snapshots/<slm_post_1_snapshot_name>/_restore
+{
+  "indices": ".ds-logs-mytest-default-default-2026.05.28-000001",
+  "rename_pattern": "\\.ds-(.+)",
+  "rename_replacement": "restored-default-$1",
+  "index_settings": {
+    "index.lifecycle.name": null,
+    "index.routing.allocation.include._tier_preference": "data_hot"
+  }
+}
+
+// 7.5 — Unhide the restored index:
+// ⚠️  Restored indices inherit index.hidden = true from the backing index.
+PUT restored-default-logs-mytest-default-default-2026.05.28-000001/_settings
+{ "index": { "hidden": false } }
+
+// 7.6 — Verify the data is accessible:
+GET restored-default-logs-mytest-*/_search
+// Expected: 3 docs from backing index 1.
+
+// ✅ SLM Post-N snapshots can serve as a long-term recovery source
+//    even after the ILM searchable snapshot has been deleted.
+//    The extra cost of keeping them is shown in the Step 6 summary table.
+
+// ---------------------------------------------------------------------
+// Step 8: Cleanup Snapshots
+// ---------------------------------------------------------------------
+// List all snapshots to collect the exact names:
+GET _snapshot/found-snapshots/_all?sort=start_time&order=asc
+
+// Delete all 5 ILM frozen snapshots (named <date>-<backing-index>-approach_a_default_policy-<uuid>):
+// DELETE _snapshot/found-snapshots/<ilm_snapshot_for_000001>
+// DELETE _snapshot/found-snapshots/<ilm_snapshot_for_000002>
+// DELETE _snapshot/found-snapshots/<ilm_snapshot_for_000003>
+// DELETE _snapshot/found-snapshots/<ilm_snapshot_for_000004>
+// DELETE _snapshot/found-snapshots/<ilm_snapshot_for_000005>
+
+// [BASH ALTERNATIVE]: ./scripts/v8.19/cleanup_old_snapshots.sh
+// (pass a small minutes_old value, e.g. 1, to remove ILM snapshots from this session)
+
+// Delete all 10 SLM snapshots (named approach-a-storage-cost-<date>[-<N>]):
+// DELETE _snapshot/found-snapshots/<slm_pre_1>
+// DELETE _snapshot/found-snapshots/<slm_post_1>
+// DELETE _snapshot/found-snapshots/<slm_pre_2>
+// DELETE _snapshot/found-snapshots/<slm_post_2>
+// DELETE _snapshot/found-snapshots/<slm_pre_3>
+// DELETE _snapshot/found-snapshots/<slm_post_3>
+// DELETE _snapshot/found-snapshots/<slm_pre_4>
+// DELETE _snapshot/found-snapshots/<slm_post_4>
+// DELETE _snapshot/found-snapshots/<slm_pre_5>
+// DELETE _snapshot/found-snapshots/<slm_post_5>
+
+// Verify the repository is clean (only pre-existing snapshots remain):
+GET _snapshot/found-snapshots/_all?sort=start_time&order=desc
+
+// ---------------------------------------------------------------------
+// Step 9: Environment Cleanup
+// ---------------------------------------------------------------------
+// Reset ILM poll interval:
+PUT _cluster/settings
+{
+  "transient": {
+    "indices.lifecycle.poll_interval": null
+  }
+}
+
+// Delete the SLM policy:
+DELETE _slm/policy/approach_a_default_slm_policy
+
+// Delete the data stream (removes 000006 write index and any remaining backing indices):
+DELETE _data_stream/logs-mytest-default-default
+
+// Delete the ILM policy:
+DELETE _ilm/policy/approach_a_default_policy
+
+// Delete the index template:
+DELETE _index_template/approach_a_default_template
+
+// Delete any restored indices from Step 7 (if it ran):
+DELETE restored-default-*
