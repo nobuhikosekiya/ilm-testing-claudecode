@@ -1,0 +1,1059 @@
+======================================================================
+v8.19 SLM Storage Cost Test Scenario — 2026-05-28T01:21:24Z
+======================================================================
+
+Scenario file : scenarios/v8.19/slm_storage_cost.txt
+Output file   : runs/v8.19/slm_storage_cost.txt
+
+
+── STEP 1: Shorten ILM poll interval ──
+{"acknowledged":true,"persistent":{},"transient":{"indices":{"lifecycle":{"poll_interval":"10s"}}}}
+
+── STEP 2: Create ILM policy ──
+{"acknowledged":true}
+
+── STEP 2.5: Create SLM policy ──
+{"acknowledged":true}
+Verify SLM policy:
+{"approach_a_default_slm_policy":{"version":1,"modified_date":"2026-05-28T01:21:59.142Z","modified_date_millis":1779931319142,"policy":{"name":"<approach-a-storage-cost-{now/d}>","schedule":"0 0 0 1 1 ? 2099","repository":"found-snapshots","config":{"indices":["logs-mytest-default-default"],"include_global_state":false,"partial":true},"retention":{"expire_after":"30d","min_count":1,"max_count":20}},"next_execution":"1969-12-31T23:59:59.999Z","next_execution_millis":-1,"stats":{"policy":"approach_a_default_slm_policy","snapshots_taken":0,"snapshots_failed":0,"snapshots_deleted":0,"snapshot_deletion_failures":0}}}
+
+── STEP 3: Create index template ──
+{"acknowledged":true}
+Verify template:
+{
+  "name": "approach_a_default_template",
+  "patterns": [
+    "logs-mytest-default-*"
+  ],
+  "priority": 300
+}
+
+
+── STEP 4: Ingest cycles 1–5 ──
+
+═══════════════════════════════════════════════════
+CYCLE 1 — Backing index 000001
+═══════════════════════════════════════════════════
+
+4.1a — Ingest 3 docs (with ~2s pauses for separate segments)
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000001","_id":"zd4tbJ4BaFODm9o7I0hW","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000001","_id":"zt4tbJ4BaFODm9o7K0ik","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":1,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000001","_id":"z94tbJ4BaFODm9o7M0jP","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":2,"_primary_term":1}
+4.1b — Waiting 20s for ILM rollover...
+4.1b — Confirming rollover:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000001 9_gvHCG5RgWL-jkf25p36w   1   1          3            0     12.5kb         12.5kb       12.5kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000002 OR41wmLGQRaPEjsYCW273Q   1   1          0            0       227b           227b         227b
+
+4.1d — SLM Pre-1: capture 000001 before force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg"}
+Confirm SLM Pre-1 snapshot name:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg",
+    "start_time_string": "2026-05-28T01:23:21.550Z",
+    "start_time": 1779931401550,
+    "time_string": "2026-05-28T01:23:22.403Z",
+    "time": 1779931402403
+  }
+}
+
+4.1e — Force merge 000001 to 1 segment
+{"_shards":{"total":2,"successful":1,"failed":0}}
+4.1f — SLM Post-1: capture 000001 after force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia"}
+Confirm SLM Post-1 snapshot name:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia",
+    "start_time_string": "2026-05-28T01:23:44.762Z",
+    "start_time": 1779931424762,
+    "time_string": "2026-05-28T01:23:45.559Z",
+    "time": 1779931425559
+  }
+}
+
+4.1g — [BASH] Storage checkpoint for 000001 (Pre+Post SLM, no ILM yet):
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000001 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg              | 13156           | 13156          
+SLM        | approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia              | 5102            | 5102           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000001
+
+[ ILM Snapshots ]
+  Times taken : 0
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 2
+  Total actual storage consumed (Incremental) : 18258 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 18258 bytes
+================================================================================
+
+
+═══════════════════════════════════════════════════
+CYCLE 2 — Backing index 000002
+═══════════════════════════════════════════════════
+
+4.2a — Ingest 3 docs into 000002
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000002","_id":"3t4ubJ4BaFODm9o7v0hx","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000002","_id":"394ubJ4BaFODm9o7x0i-","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":1,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000002","_id":"4N4ubJ4BaFODm9o7z0jZ","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":2,"_primary_term":1}
+4.2b — Waiting 20s for ILM rollover...
+4.2b — Confirming rollover:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000001 9_gvHCG5RgWL-jkf25p36w   1   1          3            0      4.9kb          4.9kb        4.9kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000002 OR41wmLGQRaPEjsYCW273Q   1   1          1            0      4.4kb          4.4kb        4.4kb
+
+Waiting 20s more for rollover...
+Re-checking indices:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000001 9_gvHCG5RgWL-jkf25p36w   1   1          3            0      4.9kb          4.9kb        4.9kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000002 OR41wmLGQRaPEjsYCW273Q   1   1          1            0      4.4kb          4.4kb        4.4kb
+
+Re-check after 15s:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000001 9_gvHCG5RgWL-jkf25p36w   1   1          3            0      4.9kb          4.9kb        4.9kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000002 OR41wmLGQRaPEjsYCW273Q   1   1          3            0      8.7kb          8.7kb        8.7kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000003 g8dR5dUQQL2hRisWtUYeog   1   1          0            0       227b           227b         227b
+
+4.2d — SLM Pre-2: capture 000002 before force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq"}
+Confirm SLM Pre-2:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq",
+    "start_time_string": "2026-05-28T01:26:32.334Z",
+    "start_time": 1779931592334,
+    "time_string": "2026-05-28T01:26:33.096Z",
+    "time": 1779931593096
+  }
+}
+
+4.2e — Force merge 000002 to 1 segment
+{"_shards":{"total":2,"successful":1,"failed":0}}
+4.2f — SLM Post-2: capture 000002 after force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq"}
+Confirm SLM Post-2:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq",
+    "start_time_string": "2026-05-28T01:26:37.537Z",
+    "start_time": 1779931597537,
+    "time_string": "2026-05-28T01:26:38.302Z",
+    "time": 1779931598302
+  }
+}
+
+4.2g — [BASH] Storage checkpoint for 000002:
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000002 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg              | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq              | 9078            | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq              | 5086            | 5086           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000002
+
+[ ILM Snapshots ]
+  Times taken : 0
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 4
+  Total actual storage consumed (Incremental) : 14391 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14391 bytes
+================================================================================
+
+ILM status check for 000001:
+
+ILM status: 000001 is now in frozen phase (partial-.ds-...-000001). SLM Pre/Post captured before ILM froze it. ✓
+
+═══════════════════════════════════════════════════
+CYCLE 3 — Backing index 000003
+═══════════════════════════════════════════════════
+
+4.3a — Ingest 3 docs into 000003
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000003","_id":"-d4xbJ4BaFODm9o7nkit","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000003","_id":"-t4xbJ4BaFODm9o7p0gN","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":1,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000003","_id":"-94xbJ4BaFODm9o7r0g4","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":2,"_primary_term":1}
+4.3b — Waiting 30s for ILM rollover...
+4.3b — Confirming rollover:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000003 g8dR5dUQQL2hRisWtUYeog   1   1          1            0      4.4kb          4.4kb        4.4kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000002 OR41wmLGQRaPEjsYCW273Q   1   1          3            0      4.9kb          4.9kb        4.9kb
+
+Re-checking for 000004:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000003 g8dR5dUQQL2hRisWtUYeog   1   1          1            0      4.4kb          4.4kb        4.4kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000002 OR41wmLGQRaPEjsYCW273Q   1   1          3            0      4.9kb          4.9kb        4.9kb
+
+Forcing refresh on 000003 to sync index stats:
+{"_shards":{"total":2,"successful":1,"failed":0}}
+Check after refresh + 15s:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000003 g8dR5dUQQL2hRisWtUYeog   1   1          3            0      8.7kb          8.7kb        8.7kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000005 QmGTjcOISmWjmD7isg8nxQ   1   1          0            0       227b           227b         227b
+
+NOTE: 000004 is absent from data stream (ILM created and rolled over it unexpectedly). Proceeding with 000003.
+
+4.3d — SLM Pre-3: capture 000003 before force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw"}
+Confirm SLM Pre-3:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw",
+    "start_time_string": "2026-05-28T01:31:25.103Z",
+    "start_time": 1779931885103,
+    "time_string": "2026-05-28T01:31:25.935Z",
+    "time": 1779931885935
+  }
+}
+
+4.3e — Force merge 000003 to 1 segment
+{"_shards":{"total":2,"successful":1,"failed":0}}
+4.3f — SLM Post-3: capture 000003 after force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w"}
+Confirm SLM Post-3:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w",
+    "start_time_string": "2026-05-28T01:31:30.505Z",
+    "start_time": 1779931890505,
+    "time_string": "2026-05-28T01:31:31.171Z",
+    "time": 1779931891171
+  }
+}
+
+4.3g — [BASH] Storage checkpoint for 000003:
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000003 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq              | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq              | 0               | 227            
+SLM        | cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g                       | 9078            | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw              | 0               | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w              | 5078            | 5078           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000003
+
+[ ILM Snapshots ]
+  Times taken : 0
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 5
+  Total actual storage consumed (Incremental) : 14383 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14383 bytes
+================================================================================
+
+NOTE: cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g (Elastic Cloud auto-SLM) fired before Pre-3,
+absorbing the pre-merge blobs. Pre-3 incremental = 0 as a result.
+
+═══════════════════════════════════════════════════
+CYCLE 4 — Backing index 000005
+(000004 absent: ILM skipped it during rollover churn)
+═══════════════════════════════════════════════════
+
+4.4a — Ingest 3 docs into 000005
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000005","_id":"G942bJ4BaFODm9o7DUmi","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000005","_id":"HN42bJ4BaFODm9o7FUns","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":1,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000005","_id":"Hd42bJ4BaFODm9o7HkkR","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":2,"_primary_term":1}
+Forcing refresh + waiting 30s for ILM rollover...
+4.4b — Confirming rollover:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008 RlMwJ--GTJOx_sBOqRuJWA   1   1          0            0       227b           227b         227b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000005 QmGTjcOISmWjmD7isg8nxQ   1   1          3            0      4.9kb          4.9kb        4.9kb
+
+NOTE: 000001 deleted (8m phase). 000003 now frozen. 000006,000007 skipped (same phantom rollover pattern).
+      Current write index is 000008. Proceeding with 000005 SLM Pre/Post.
+
+4.4d — SLM Pre-4: capture 000005 before force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw"}
+Confirm SLM Pre-4:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw",
+    "start_time_string": "2026-05-28T01:33:49.414Z",
+    "start_time": 1779932029414,
+    "time_string": "2026-05-28T01:33:50.179Z",
+    "time": 1779932030179
+  }
+}
+
+4.4e — Force merge 000005 to 1 segment
+{"_shards":{"total":2,"successful":1,"failed":0}}
+4.4f — SLM Post-4: capture 000005 after force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva"}
+Confirm SLM Post-4:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva",
+    "start_time_string": "2026-05-28T01:33:54.617Z",
+    "start_time": 1779932034617,
+    "time_string": "2026-05-28T01:33:55.335Z",
+    "time": 1779932035335
+  }
+}
+
+4.4g — [BASH] Storage checkpoint for 000005:
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000005 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g                       | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw              | 5040            | 5040           
+SLM        | approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva              | 0               | 5040           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000005
+
+[ ILM Snapshots ]
+  Times taken : 0
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 5
+  Total actual storage consumed (Incremental) : 5267 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 5267 bytes
+================================================================================
+
+
+═══════════════════════════════════════════════════
+CYCLE 5 — Backing index 000008
+═══════════════════════════════════════════════════
+
+4.5a — Ingest 3 docs into 000008
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000008","_id":"ON44bJ4BaFODm9o7kknj","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000008","_id":"Od44bJ4BaFODm9o7m0k8","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":1,"_primary_term":1}
+{"_index":".ds-logs-mytest-default-default-2026.05.28-000008","_id":"Ot44bJ4BaFODm9o7o0ln","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":2,"_primary_term":1}
+4.5b — Waiting 40s for ILM rollover (no pre-refresh this time)...
+4.5b — Confirming rollover:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008 RlMwJ--GTJOx_sBOqRuJWA   1   1          1            0      4.5kb          4.5kb        4.5kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000005 QmGTjcOISmWjmD7isg8nxQ   1   1          3            0      4.9kb          4.9kb        4.9kb
+
+Re-check after 20s:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008 RlMwJ--GTJOx_sBOqRuJWA   1   1          1            0      4.5kb          4.5kb        4.5kb
+
+Flushing 000008 to sync Lucene stats without triggering phantom rollovers:
+{"_shards":{"total":2,"successful":1,"failed":0}}
+Check after flush + 15s:
+health status index                                             uuid                   pri rep docs.count docs.deleted store.size pri.store.size dataset.size
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008 RlMwJ--GTJOx_sBOqRuJWA   1   1          3            0        9kb            9kb          9kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012 CjgxYNAaS2-eansjwf7Zyw   1   1          0            0       227b           227b         227b
+
+NOTE: Flush on 000008 triggered phantom rollovers (000009,000010,000011 skipped). New write: 000012.
+      This ILM phantom-rollover bug is a key finding.
+
+4.5d — SLM Pre-5: capture 000008 before force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg"}
+Confirm SLM Pre-5:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg",
+    "start_time_string": "2026-05-28T01:38:36.844Z",
+    "start_time": 1779932316844,
+    "time_string": "2026-05-28T01:38:37.645Z",
+    "time": 1779932317645
+  }
+}
+
+4.5e — Force merge 000008 to 1 segment
+{"_shards":{"total":2,"successful":1,"failed":0}}
+4.5f — SLM Post-5: capture 000008 after force merge
+{"snapshot_name":"approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq"}
+Confirm SLM Post-5:
+{
+  "last_success": {
+    "snapshot_name": "approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq",
+    "start_time_string": "2026-05-28T01:38:42.047Z",
+    "start_time": 1779932322047,
+    "time_string": "2026-05-28T01:38:42.844Z",
+    "time": 1779932322844
+  }
+}
+
+4.5g — [BASH] Storage checkpoint for 000008:
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000008 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw              | 249             | 249            
+SLM        | approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva              | 0               | 249            
+SLM        | approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg              | 9238            | 9238           
+SLM        | approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq              | 5182            | 5182           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000008
+
+[ ILM Snapshots ]
+  Times taken : 0
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 4
+  Total actual storage consumed (Incremental) : 14669 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14669 bytes
+================================================================================
+
+Full SLM snapshot list (all 10 SLM snapshots + cloud snapshot):
+[
+  {
+    "name": "cloud-snapshot-2026.05.27-wmigxzfhtfy68rdrr-aypq",
+    "start": 1779924600485
+  },
+  {
+    "name": "cloud-snapshot-2026.05.28-jmishb9sqwij-chqud2mmg",
+    "start": 1779926400993
+  },
+  {
+    "name": "cloud-snapshot-2026.05.28-cex7hdf2rvcr1yymf5qldw",
+    "start": 1779928199935
+  },
+  {
+    "name": "cloud-snapshot-2026.05.28-6hzvpedrrk2ifatkorkpha",
+    "start": 1779929999985
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg",
+    "start": 1779931401550
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia",
+    "start": 1779931424762
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq",
+    "start": 1779931592334
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq",
+    "start": 1779931597537
+  },
+  {
+    "name": "cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g",
+    "start": 1779931799926
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw",
+    "start": 1779931885103
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w",
+    "start": 1779931890505
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw",
+    "start": 1779932029414
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva",
+    "start": 1779932034617
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg",
+    "start": 1779932316844
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq",
+    "start": 1779932322047
+  }
+]
+
+
+── STEP 5: Monitor — Wait for All Backing Indices to Reach Frozen ──
+
+Status at 01:39:39:
+  000001 — DELETED (8m phase hit)
+  000002 — frozen (partial mount) ✓
+  000003 — frozen (partial mount) ✓
+  000005 — frozen (partial mount) ✓
+  000008 — hot/complete, awaiting frozen phase (~01:39:50 UTC)
+
+
+[01:39:39] --- poll ---
+[01:39:39] All mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000005                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008                           3        5kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:39:39] ILM snapshot count: 4
+[01:39:39] Waiting for 000008 frozen...
+
+[01:39:55] --- poll ---
+[01:39:55] All mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000005                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008                           3        5kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:39:55] ILM snapshot count: 4
+[01:39:55] Waiting for 000008 frozen...
+
+[01:40:10] --- poll ---
+[01:40:10] All mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000005                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008                           3        5kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:40:10] ILM snapshot count: 4
+[01:40:10] Waiting for 000008 frozen...
+
+[01:40:26] --- poll ---
+[01:40:26] All mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000005                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000008                           3        5kb
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:40:26] ILM snapshot count: 4
+[01:40:26] Waiting for 000008 frozen...
+
+[01:40:42] --- poll ---
+[01:40:42] All mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000005                   3         0b
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:40:42] ILM snapshot count: 5
+[01:40:42] ✓ 000008 is now frozen.
+
+── STEP 5 CHECKPOINT: Storage measurement for all 5 backing indices ──
+Time: 01:41:14
+(Note: 000001, 000002, 000003 already deleted from data stream; ILM snapshots remain in repo)
+
+=== 000001 ===
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000001 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg              | 13156           | 13156          
+SLM        | approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia              | 5102            | 5102           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000001-approach_a_default_policy-mjarrwy7sout3jfspb4anw | 0               | 5102           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000001
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 2
+  Total actual storage consumed (Incremental) : 18258 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 18258 bytes
+================================================================================
+
+=== 000002 ===
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000002 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg              | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq              | 9078            | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq              | 5086            | 5086           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000002-approach_a_default_policy-dhjnxa0tre2dvzxxszb2tw | 0               | 5086           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000002
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 4
+  Total actual storage consumed (Incremental) : 14391 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14391 bytes
+================================================================================
+
+=== 000003 ===
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000003 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq              | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq              | 0               | 227            
+SLM        | cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g                       | 9078            | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw              | 0               | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w              | 5078            | 5078           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000003-approach_a_default_policy-iw4jhw3xtvialrkus3rcfg | 0               | 5078           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000003
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 5
+  Total actual storage consumed (Incremental) : 14383 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14383 bytes
+================================================================================
+
+=== 000005 ===
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000005 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g                       | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw              | 5040            | 5040           
+SLM        | approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva              | 0               | 5040           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000005-approach_a_default_policy-zcqoh1rqtxavx4sjrid-4g | 373             | 5080           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000005
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 373 bytes
+
+[ SLM Snapshots ]
+  Times taken : 5
+  Total actual storage consumed (Incremental) : 5267 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 5640 bytes
+================================================================================
+
+=== 000008 ===
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000008 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw              | 249             | 249            
+SLM        | approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva              | 0               | 249            
+SLM        | approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg              | 9238            | 9238           
+SLM        | approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq              | 5182            | 5182           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000008-approach_a_default_policy-5wuah7eittaeohfjwzti3q | 0               | 5182           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000008
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 4
+  Total actual storage consumed (Incremental) : 14669 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14669 bytes
+================================================================================
+
+
+── STEP 6: Wait for Delete Phase — Final Storage Measurement ──
+
+Delete phase schedule (8m after each rollover):
+  000001: rolled over ~01:22:30 → delete ~01:30:30 (DONE)
+  000002: rolled over ~01:26:15 → delete ~01:34:15 (DONE)
+  000003: rolled over ~01:29:45 → delete ~01:37:45 (DONE)
+  000005: rolled over ~01:33:15 → delete ~01:41:15 (DONE or imminent)
+  000008: rolled over ~01:36:50 → delete ~01:44:50 (waiting)
+
+
+[01:42:45] --- poll ---
+[01:42:45] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:42:45] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:42:45] Waiting for 000008 delete phase...
+
+[01:43:05] --- poll ---
+[01:43:05] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:43:05] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:43:05] Waiting for 000008 delete phase...
+
+[01:43:25] --- poll ---
+[01:43:25] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:43:25] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:43:25] Waiting for 000008 delete phase...
+
+[01:43:45] --- poll ---
+[01:43:45] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:43:45] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:43:45] Waiting for 000008 delete phase...
+
+[01:44:06] --- poll ---
+[01:44:06] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:44:06] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:44:06] Waiting for 000008 delete phase...
+
+[01:44:26] --- poll ---
+[01:44:26] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:44:26] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:44:26] Waiting for 000008 delete phase...
+
+[01:44:46] --- poll ---
+[01:44:46] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:44:46] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:44:46] Waiting for 000008 delete phase...
+
+[01:45:06] --- poll ---
+[01:45:06] Mytest indices:
+green  open   partial-.ds-logs-mytest-default-default-2026.05.28-000008                   3         0b
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:45:06] Data stream backing indices:
+[
+  "partial-.ds-logs-mytest-default-default-2026.05.28-000008",
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:45:06] Waiting for 000008 delete phase...
+
+[01:45:27] --- poll ---
+[01:45:27] Mytest indices:
+yellow open   .ds-logs-mytest-default-default-2026.05.28-000012                           0       249b
+[01:45:27] Data stream backing indices:
+[
+  ".ds-logs-mytest-default-default-2026.05.28-000012"
+]
+[01:45:27] ✓ 000008 deleted — all 5 backing indices through delete phase.
+
+── FINAL CHECKPOINT (Step 6): All 5 backing indices deleted ──
+Time: 01:45:40
+Data stream now shows only 000012 (current write index, 0 docs).
+ILM snapshots and SLM snapshots remain (delete_searchable_snapshot: false).
+
+=== FINAL STORAGE MEASUREMENTS ===
+
+--- 000001 ---
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000001 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg              | 13156           | 13156          
+SLM        | approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia              | 5102            | 5102           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000001-approach_a_default_policy-mjarrwy7sout3jfspb4anw | 0               | 5102           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000001
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 2
+  Total actual storage consumed (Incremental) : 18258 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 18258 bytes
+================================================================================
+
+--- 000002 ---
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000002 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg              | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq              | 9078            | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq              | 5086            | 5086           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000002-approach_a_default_policy-dhjnxa0tre2dvzxxszb2tw | 0               | 5086           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000002
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 4
+  Total actual storage consumed (Incremental) : 14391 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14391 bytes
+================================================================================
+
+--- 000003 ---
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000003 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq              | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq              | 0               | 227            
+SLM        | cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g                       | 9078            | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw              | 0               | 9078           
+SLM        | approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w              | 5078            | 5078           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000003-approach_a_default_policy-iw4jhw3xtvialrkus3rcfg | 0               | 5078           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000003
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 5
+  Total actual storage consumed (Incremental) : 14383 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14383 bytes
+================================================================================
+
+--- 000005 ---
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000005 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | cloud-snapshot-2026.05.28-c3emrak3slmriskao1mz1g                       | 227             | 227            
+SLM        | approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w              | 0               | 227            
+SLM        | approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw              | 5040            | 5040           
+SLM        | approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva              | 0               | 5040           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000005-approach_a_default_policy-zcqoh1rqtxavx4sjrid-4g | 373             | 5080           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000005
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 373 bytes
+
+[ SLM Snapshots ]
+  Times taken : 5
+  Total actual storage consumed (Incremental) : 5267 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 5640 bytes
+================================================================================
+
+--- 000008 ---
+=== Analyzing snapshot footprint for index: .ds-logs-mytest-default-default-2026.05.28-000008 ===
+Fetching snapshot list...
+--------------------------------------------------------------------------------
+TYPE       | SNAPSHOT NAME                                                          | INCREMENTAL (B) | TOTAL (B)      
+--------------------------------------------------------------------------------
+SLM        | approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw              | 249             | 249            
+SLM        | approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva              | 0               | 249            
+SLM        | approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg              | 9238            | 9238           
+SLM        | approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq              | 5182            | 5182           
+ILM        | 2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000008-approach_a_default_policy-5wuah7eittaeohfjwzti3q | 0               | 5182           
+--------------------------------------------------------------------------------
+=== SUMMARY REPORT ===
+Index: .ds-logs-mytest-default-default-2026.05.28-000008
+
+[ ILM Snapshots ]
+  Times taken : 1
+  Total actual storage consumed (Incremental) : 0 bytes
+
+[ SLM Snapshots ]
+  Times taken : 4
+  Total actual storage consumed (Incremental) : 14669 bytes
+
+[ GRAND TOTAL ]
+  Combined actual storage consumed : 14669 bytes
+================================================================================
+
+
+── STEP 7: Demonstrate SLM as Recovery After ILM Snapshot ──
+
+7.1 — List all snapshots (time order):
+[
+  {
+    "name": "approach-a-storage-cost-2026.05.28-fnkmzwhgsj6elfiz-nvhfg",
+    "type": "SLM",
+    "start": "58373-10-12T21:19:10Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia",
+    "type": "SLM",
+    "start": "58373-10-13T03:46:02Z"
+  },
+  {
+    "name": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000001-approach_a_default_policy-mjarrwy7sout3jfspb4anw",
+    "type": "ILM",
+    "start": "58373-10-15T00:38:47Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-7kmminucqf2j4_8rrgtfiq",
+    "type": "SLM",
+    "start": "58373-10-15T02:18:54Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-hmdbletoqdgaekvriio5cq",
+    "type": "SLM",
+    "start": "58373-10-15T03:45:37Z"
+  },
+  {
+    "name": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000002-approach_a_default_policy-dhjnxa0tre2dvzxxszb2tw",
+    "type": "ILM",
+    "start": "58373-10-16T23:51:34Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-8mgk092drlkocdmfjrmsxw",
+    "type": "SLM",
+    "start": "58373-10-18T11:38:23Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-i84z_k0xthkmnkqdkctq8w",
+    "type": "SLM",
+    "start": "58373-10-18T13:08:25Z"
+  },
+  {
+    "name": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000003-approach_a_default_policy-iw4jhw3xtvialrkus3rcfg",
+    "type": "ILM",
+    "start": "58373-10-19T07:25:56Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-hx0yu8hqrlq3av1uhpf7jw",
+    "type": "SLM",
+    "start": "58373-10-20T03:43:34Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-dyuvlcfgrjslmby7ranlva",
+    "type": "SLM",
+    "start": "58373-10-20T05:10:17Z"
+  },
+  {
+    "name": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000005-approach_a_default_policy-zcqoh1rqtxavx4sjrid-4g",
+    "type": "ILM",
+    "start": "58373-10-21T17:45:21Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-2zaor_kxtw61shq1vkocyg",
+    "type": "SLM",
+    "start": "58373-10-23T11:34:04Z"
+  },
+  {
+    "name": "approach-a-storage-cost-2026.05.28-_gqqwcnfsbworv4qefm_nq",
+    "type": "SLM",
+    "start": "58373-10-23T13:00:47Z"
+  },
+  {
+    "name": "2026.05.28-.ds-logs-mytest-default-default-2026.05.28-000008-approach_a_default_policy-5wuah7eittaeohfjwzti3q",
+    "type": "ILM",
+    "start": "58373-10-24T20:45:41Z"
+  }
+]
+
+7.2 — (SIMULATION) Delete ILM frozen snapshot for 000001:
+{"acknowledged":true}
+7.3 — Verify SLM Post-1 contains 000001:
+{
+  "snapshot": "approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia",
+  "indices": [
+    ".ds-logs-mytest-default-default-2026.05.28-000001",
+    ".ds-logs-mytest-default-default-2026.05.28-000002"
+  ],
+  "state": "SUCCESS"
+}
+
+7.4 — Restore 000001 from SLM Post-1 (approach-a-storage-cost-2026.05.28-ph54hzszseokmw4ncswcia):
+{"accepted":true}
+Waiting 5s for restore to progress...
+7.5 — Un-hide restored index:
+{"acknowledged":true}
+7.6 — Verify data is accessible:
+{
+  "total": 3,
+  "docs": [
+    {
+      "index": "restored-default-logs-mytest-default-default-2026.05.28-000001",
+      "ts": "2026-05-28T10:00:04Z",
+      "msg": "Log event 3 in backing index 1"
+    },
+    {
+      "index": "restored-default-logs-mytest-default-default-2026.05.28-000001",
+      "ts": "2026-05-28T10:00:00Z",
+      "msg": "Log event 1 in backing index 1"
+    },
+    {
+      "index": "restored-default-logs-mytest-default-default-2026.05.28-000001",
+      "ts": "2026-05-28T10:00:02Z",
+      "msg": "Log event 2 in backing index 1"
+    }
+  ]
+}
+
+✅ SLM Post-N confirms: viable recovery source after ILM snapshot deletion.
+   All 3 docs from backing index 000001 accessible via restored-default-... index.
+
+
+======================================================================
+RUN COMPLETE — 2026-05-28T01:48:02Z
+Output file: runs/v8.19/slm_storage_cost.txt
+======================================================================
