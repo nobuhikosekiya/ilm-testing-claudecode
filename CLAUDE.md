@@ -31,8 +31,7 @@ docs/
 
 runs/              Raw captured test output
   v<X.Y>/
-    run1.txt, run2.txt, ...
-    normal_slm_usage_with_frozen.txt, slm_waitfor.txt
+    <scenario-stem>_run1.txt, <scenario-stem>_run2.txt, ...
 ```
 
 | Path pattern | Purpose |
@@ -40,7 +39,7 @@ runs/              Raw captured test output
 | `scenarios/<version>/host_frozen_delete_keepsnapshot.txt` | Kibana Dev Tools sequence for the base ILM restore test |
 | `scenarios/<version>/normal_slm_usage_with_frozen.txt` | Extended variant demonstrating SLM unreliability |
 | `scenarios/<version>/slm_waitfor.txt` | Variant demonstrating the `wait_for_snapshot` trap |
-| `runs/<version>/run<N>.txt` | Raw captured output from a completed test run |
+| `runs/<version>/<scenario-stem>_run<N>.txt` | Raw captured output from a completed test run |
 | `docs/findings/<version>-<variant>.md` | Human-readable findings summary |
 | `scripts/<version>/restore_index.sh` | Restore one named backing index from its ILM snapshot |
 | `scripts/<version>/cleanup_old_snapshots.sh` | Delete ILM snapshots older than N minutes |
@@ -79,11 +78,12 @@ curl -s "$ES_URL/" -H "Authorization: ApiKey $API_KEY" | \
 - Scenario files live under `scenarios/<version>/` with short names: `host_frozen_delete_keepsnapshot.txt`, `normal_slm_usage_with_frozen.txt`, `slm_waitfor.txt`.
 - Scripts live under `scripts/<version>/` with short names: `restore_index.sh`, etc.
 - Never overwrite or modify an existing file. Check before creating.
-- Output files: `runs/<version>/run<N>.txt`
-  - First run: `runs/v8.19/run1.txt`
-  - Subsequent runs: `runs/v8.19/run2.txt`, `run3.txt`, …
-  - Variant runs: `runs/v8.19/normal_slm_usage_with_frozen.txt`, `runs/v8.19/slm_waitfor.txt`
-- Before creating any output file, list existing files and confirm the next available name.
+- Output files: `runs/<version>/<scenario-stem>_run<N>.txt`
+  - `<scenario-stem>` is the scenario filename without the `.txt` extension (e.g. `host_frozen_delete_keepsnapshot`, `normal_slm_usage_with_frozen`).
+  - `<N>` starts at 1 and increments for each additional run of the same scenario.
+  - Examples: `runs/v8.19/host_frozen_delete_keepsnapshot_run1.txt`, `runs/v8.19/normal_slm_usage_with_frozen_run2.txt`
+  - This rule applies to **all** scenarios — there is no special naming for "base" vs variant runs.
+- Before creating any output file, list existing files and confirm the next available run number.
 
 ---
 

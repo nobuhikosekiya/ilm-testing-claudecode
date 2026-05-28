@@ -1,6 +1,7 @@
 // =====================================================================
 // Approach A: Data Stream Test Procedure (For Kibana Dev Tools)
 // Target version: Elasticsearch / Elastic Cloud  v9.4
+// Variant: ILM Frozen Delete — Restore & Snapshot Cleanup
 // =====================================================================
 //
 // PURPOSE

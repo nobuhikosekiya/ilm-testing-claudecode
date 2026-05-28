@@ -1,12 +1,14 @@
 // =====================================================================
 // Approach A: Data Stream Test Procedure (For Kibana Dev Tools)
 // Target version: Elasticsearch / Elastic Cloud  v8.19
-// Variant: SLM as a reliable backup — positive path
+// Variant: [Optional] SLM-only Recovery — Positive Case (non-standard workflow)
 // =====================================================================
 //
 // PURPOSE OF THIS VARIANT
 // ========================
-// This scenario tests the POSITIVE SLM case: verifying that a manually
+// This scenario tests an OPTIONAL, non-standard approach: using SLM as the
+// sole long-term recovery mechanism after ILM deletes its own searchable snapshot.
+// It verifies the narrow conditions under which this works — verifying that a manually
 // triggered SLM snapshot can reliably restore deleted backing indices
 // even after:
 //   - ILM has moved the index through the Frozen tier, AND

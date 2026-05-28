@@ -72,7 +72,6 @@ scenarios/         Kibana Dev Tools command sequences
   v8.19/
     host_frozen_delete_keepsnapshot.txt              Base ILM restore test
     normal_slm_usage_with_frozen.txt               Extended: demonstrates SLM snapshot unreliability
-    slm_waitfor.txt       Extended: demonstrates the wait_for_snapshot stall trap
     longslm_restore_post_frozen.txt        Positive SLM path: SLM as a reliable sole backup
     hot_cold_frozen_delete.txt   Hot → Cold → Frozen tiered migration
     slm_storage_cost.txt  SLM snapshot storage cost analysis
@@ -99,8 +98,8 @@ docs/
 
 runs/              Raw timestamped output from completed test runs
   v8.19/
-    run1.txt, run2.txt, run3.txt
-    normal_slm_usage_with_frozen.txt, slm_waitfor.txt, longslm_restore_post_frozen.txt, ...
+    run1.txt, run2.txt, run3.txt, run4.txt, run5.txt
+    normal_slm_usage_with_frozen.txt, longslm_restore_post_frozen.txt, hot_cold_frozen.txt, hot_cold_frozen_run2.txt, slm_storage_cost.txt
   v9.4/
     run1.txt
 ```

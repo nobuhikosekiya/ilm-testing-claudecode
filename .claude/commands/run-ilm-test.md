@@ -49,22 +49,30 @@ Ask the user ALL of the following before executing anything:
    ```
 
 2. **Variant** — Which scenario to run?
-   Show available variants for the chosen version:
-   ```bash
-   ls scenarios/<version>/
-   ```
+   Do **not** just `ls` the directory. Instead, read the first 25 lines of each `.txt` file under `scenarios/<version>/` and display a formatted table:
+
+   | Filename (stem) | Variant name | Purpose (one sentence) |
+   |---|---|---|
+   | ... | ... | ... |
+
+   Extract the columns as follows:
+   - **Filename stem**: the filename without `.txt`
+   - **Variant name**: the value after `// Variant:` on line 4 of the file
+   - **Purpose**: the first sentence of the `// PURPOSE` or `// PURPOSE OF THIS VARIANT` block (strip the `// ` prefix; stop at the first `.` or end of line)
+
+   After showing the table, ask the user to pick a scenario by filename stem.
 
 3. **Output file** — Confirm the output file name.
-   - Check existing run files:
+   - All run files follow the same pattern regardless of scenario: `<scenario-stem>_run<N>.txt`
+     - `<scenario-stem>` = scenario filename without `.txt` (e.g. `host_frozen_delete_keepsnapshot`)
+     - `<N>` = run number starting at 1
+   - Check existing run files to determine the next `N`:
      ```bash
      ls runs/<version>/
      ```
-   - For `base` scenarios: determine the next run number
-     - If `run1.txt` does not exist → `run1.txt`
-     - If `run1.txt` exists but `run2.txt` does not → `run2.txt`
+     - If `<stem>_run1.txt` does not exist → use `_run1.txt`
+     - If `<stem>_run1.txt` exists but `<stem>_run2.txt` does not → use `_run2.txt`
      - etc.
-   - For `slm` and `slm_waitfor` variants: output goes to `runs/<version>/<variant>.txt`
-     - If it already exists, warn the user and ask if they want to create `<variant>_run2.txt` etc.
    - Show the user what the output file will be called and ask them to confirm.
 
 4. **Stop-at step** — Should the run stop at a specific step?
