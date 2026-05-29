@@ -1,5 +1,17 @@
 # Elasticsearch ILM Behaviour Tests
 
+> [!CAUTION]
+> **Use a NEW, dedicated test cluster — never run this against a shared or production deployment.**
+>
+> These scenarios make **cluster-level changes** and execute **destructive deletion APIs** that affect shared state:
+>
+> - **Cluster settings** — `PUT _cluster/settings` modifies `indices.lifecycle.poll_interval` globally, affecting ILM timing for every index on the cluster, not just the test index.
+> - **Snapshot deletion** — `cleanup_old_snapshots.sh` deletes snapshots from the shared `found-snapshots` repository. A poorly chosen keyword could match and permanently delete snapshots that belong to other indices.
+> - **Data stream and index deletion** — cleanup removes the test data stream and all restored indices. On a shared cluster, a naming collision could silently wipe unrelated data.
+> - **ILM policy and template deletion** — Step 9 teardown removes named policies and templates which could conflict with or replace existing ones if names are reused.
+>
+> Spin up a fresh Elastic Cloud deployment, run the tests, then tear it down. Do not point this at any cluster that holds data you care about.
+
 A test suite for verifying **ILM (Index Lifecycle Management)** behaviour on Elastic Cloud deployments — covering phase transitions, snapshot lifecycle, SLM integration, tiered storage, and operational pitfalls.
 
 Tests cover multiple Elasticsearch versions. Each scenario is a self-contained end-to-end flow: from policy creation and data ingestion through phase transitions to deletion. Manually restoring a deleted backing index from its ILM snapshot is supported as an optional step for users who need to verify recoverability, but it is not the primary focus of most scenarios.
